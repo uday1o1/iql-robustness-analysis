@@ -24,6 +24,10 @@ flags.DEFINE_integer('log_interval', 1000, 'Logging interval.')
 flags.DEFINE_integer('eval_interval', 5000, 'Eval interval.')
 flags.DEFINE_integer('batch_size', 256, 'Mini batch size.')
 flags.DEFINE_integer('max_steps', int(1e6), 'Number of training steps.')
+flags.DEFINE_integer('num_critics', 2,
+                     'Number of Q-networks (2=DoubleCritic, 3=TripleCritic).')
+flags.DEFINE_integer('save_interval', 0,
+                     'Checkpoint save interval (0=save only final).')
 flags.DEFINE_boolean('tqdm', True, 'Use tqdm progress bar.')
 config_flags.DEFINE_config_file(
     'config',
@@ -89,6 +93,7 @@ def main(_):
                     env.observation_space.sample()[np.newaxis],
                     env.action_space.sample()[np.newaxis],
                     max_steps=FLAGS.max_steps,
+                    num_critics=FLAGS.num_critics,
                     **kwargs)
 
     eval_returns = []
@@ -118,6 +123,13 @@ def main(_):
             np.savetxt(os.path.join(FLAGS.save_dir, f'{FLAGS.seed}.txt'),
                        eval_returns,
                        fmt=['%d', '%.1f'])
+
+            # Save checkpoint
+            if FLAGS.save_interval > 0 and i % FLAGS.save_interval == 0:
+                agent.save(FLAGS.save_dir, i)
+
+    # Always save final checkpoint
+    agent.save(FLAGS.save_dir, FLAGS.max_steps)
 
 
 if __name__ == '__main__':

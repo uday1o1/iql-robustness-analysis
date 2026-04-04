@@ -4,14 +4,15 @@ import jax
 import jax.numpy as jnp
 
 from common import Batch, InfoDict, Model, Params, PRNGKey
+from critic import _min_q
 
 
 def update(key: PRNGKey, actor: Model, critic: Model, value: Model,
            batch: Batch, temperature: float) -> Tuple[Model, InfoDict]:
     v = value(batch.observations)
 
-    q1, q2 = critic(batch.observations, batch.actions)
-    q = jnp.minimum(q1, q2)
+    critic_output = critic(batch.observations, batch.actions)
+    q = _min_q(critic_output)
     exp_a = jnp.exp((q - v) * temperature)
     exp_a = jnp.minimum(exp_a, 100.0)
 
