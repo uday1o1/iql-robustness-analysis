@@ -1,0 +1,35 @@
+# Modern requirements for local development (Python 3.10 or 3.11 recommended)
+# For GPU training, use Google Colab instead — see uday_q_ensemble_iql.ipynb
+
+numpy>=1.24.0
+scipy>=1.10.0
+absl-py>=1.4.0
+tqdm>=4.65.0
+ml_collections>=0.1.1
+
+# JAX (CPU-only for local testing; use Colab for GPU)
+jax>=0.4.20
+jaxlib>=0.4.20
+
+# Flax + Optax
+flax>=0.7.0
+optax>=0.1.7
+
+# MuJoCo (new official package, replaces mujoco-py)
+mujoco>=3.0.0
+gymnasium[mujoco]>=0.29.0
+
+# D4RL — use minari (modern replacement) or install d4rl from source
+# pip install git+https://github.com/Farama-Foundation/d4rl@master
+# NOTE: d4rl requires Python <= 3.11 and gym (not gymnasium)
+
+# For the old gym-based codebase (if not migrating to gymnasium):
+gym>=0.26.0
+
+# Visualization & logging
+matplotlib>=3.7.0
+tensorboardX>=2.6
+imageio>=2.31.0
+
+# TensorFlow Probability (for policy distributions)
+tensorflow-probability>=0.22.0
