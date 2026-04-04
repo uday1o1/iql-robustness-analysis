@@ -21,14 +21,14 @@
 
 ## Abstract
 
-Offline Reinforcement Learning (Offline RL) learns decision-making policies from previously collected datasets without environment interaction. A key challenge is **distribution shift** — the policy learned from static data must operate in environments that differ from the training distribution. Such shifts arise from changes in dynamics, observations, or reward structures, and often lead to performance degradation.
+Offline Reinforcement Learning (Offline RL) learns decision-making policies from previously collected datasets without environment interaction. A key challenge is **distribution shift** — the policy learned from static data must operate in environments that differ from the training distribution.
 
 We study the robustness of **Implicit Q-Learning (IQL)**, a state-of-the-art offline RL algorithm that avoids overestimation of unseen actions through expectile regression and advantage-weighted policy updates. We:
 
 1. **Reproduce** IQL on standard D4RL benchmark tasks to establish baseline performance
 2. **Evaluate** trained policies under controlled environment modifications (gravity shift, observation noise)
 3. **Extend** IQL with a Q-function ensemble (TripleCritic) to improve robustness
-4. **Measure** performance degradation using formal robustness metrics
+4. **Measure** performance degradation using formal robustness metrics (Δ(δ), AUDC)
 
 **Research Question:** *How robust is Implicit Q-Learning under controlled distribution shift, and can we improve its robustness?*
 
@@ -57,20 +57,17 @@ The expectile parameter `τ` controls the spectrum from SARSA (`τ=0.5`) to Q-le
 
 > Kumar, A., Zhou, A., Tucker, G., & Levine, S. (2020). *Conservative Q-Learning for Offline Reinforcement Learning*. NeurIPS.
 
-CQL learns a **pessimistic Q-function** that lower-bounds the true value by adding a regularizer that penalizes high Q-values for OOD actions. Key property: CQL backups are **gap-expanding** — they increase the difference between in-distribution and OOD action values.
+CQL learns a **pessimistic Q-function** that lower-bounds the true value by adding a regularizer that penalizes high Q-values for OOD actions. Key property: CQL backups are **gap-expanding** — they increase the difference between in-distribution and OOD action values (Theorem 3.4).
 
 ### TD3+BC
 
 > Fujimoto, S. & Gu, S. (2021). *A Minimalist Approach to Offline Reinforcement Learning*. NeurIPS.
 
-TD3+BC adds a behavior cloning term to TD3's policy update: `π = argmax_π [λQ(s,π(s)) - (π(s)-a)²]`. Notable finding: offline-trained policies exhibit **high episodic variance** compared to online-trained policies.
+TD3+BC adds a behavior cloning term to TD3's policy update: `π = argmax_π [λQ(s,π(s)) - (π(s)-a)²]`. Notable finding: offline-trained policies exhibit **high episodic variance** compared to online-trained policies (Figures 2-3 in paper).
 
 ### Our Contribution
 
-These methods are primarily evaluated under the assumption that training and testing environments are **identical**. None explicitly evaluate robustness under environment-level perturbations. We fill this gap by:
-- Retaining standard offline training
-- Evaluating policies under **controlled distribution shift** at deployment time
-- Comparing baseline IQL vs Q-ensemble IQL under shift
+These methods are primarily evaluated under the assumption that training and testing environments are **identical**. None explicitly evaluate robustness under environment-level perturbations. We fill this gap by retaining standard offline training and evaluating policies under **controlled distribution shift** at deployment time.
 
 ---
 
@@ -83,8 +80,6 @@ We use the [D4RL](https://github.com/Farama-Foundation/d4rl) benchmark datasets 
 | `hopper-medium-v2` | 11 | 3 | 1M transitions | One-legged hopping robot, mediocre policy data |
 | `halfcheetah-medium-v2` | 17 | 6 | 1M transitions | Two-legged running robot, mediocre policy data |
 | `walker2d-medium-v2` | 17 | 6 | 1M transitions | Two-legged walking robot, mediocre policy data |
-
-Each dataset contains transitions from a partially trained ("medium") policy — not random, not expert.
 
 ---
 
@@ -107,39 +102,50 @@ We extend IQL's `DoubleCritic` (2 Q-networks, `min(q1,q2)`) to a `TripleCritic` 
 
 - **Normalized score:** `J(π, E_δ) = 100 × (Return - Return_random) / (Return_expert - Return_random)`
 - **Robustness drop:** `Δ(δ) = (J(π, E_0) - J(π, E_δ)) / J(π, E_0)` — 0 = robust, positive = degraded
-- **AUDC:** Area Under Degradation Curve — integrates |Δ(δ)| over all shift levels
+- **AUDC:** Area Under Degradation Curve — integrates |Δ(δ)| over all shift levels (lower = more robust)
 - **Worst-case:** `min_δ J(π, E_δ)` across all shift levels
 
 ---
 
-## Progress Timeline
+## Progress & Status
 
-### Check-In 1 — Project Setup
-- ✅ Identified D4RL datasets (hopper, halfcheetah, walker2d)
-- ✅ Loaded datasets, verified MuJoCo compatibility
-- ✅ Inspected state/action distributions
-- ✅ Confirmed environment parameters for modification
-- ✅ Paper outline drafted
+### ✅ Completed
 
-### Check-In 2 — Baseline & Extension
-- ✅ **Joao:** Baseline IQL running on `hopper-medium-v2` — score: **52.79**
-- ✅ **Shloak:** Gravity + observation noise wrapper design
-- ✅ **Pramod:** Literature survey (IQL, CQL, TD3+BC), formal robustness definition
-- ✅ **Uday:** TripleCritic implemented and trained — score: **50.88** on `hopper-medium-v2`
-- ✅ Results: Baseline and Q-ensemble converge to comparable final performance (difference of 1.91 points), confirming correct implementation
+| Item | Details |
+|---|---|
+| Literature review | IQL, CQL, TD3+BC — formal comparison of distribution shift strategies |
+| IQL implementation | Full JAX/Flax implementation in `iql/` package |
+| Baseline training (hopper) | Score: **52.79** on hopper-medium-v2 (300k steps) |
+| Q-ensemble (TripleCritic) | Integrated into codebase via `--num_critics=3` flag |
+| Q-ensemble training (hopper) | Score: **50.88** on hopper-medium-v2 (300k steps) |
+| Gravity shift wrapper | `wrappers/gravity_shift.py` — scales MuJoCo gravity |
+| Observation noise wrapper | `wrappers/observation_noise.py` — Gaussian noise on obs |
+| Shift evaluation pipeline | `scripts/evaluate_shift.py` → CSV output |
+| Robustness metrics | `scripts/compute_robustness.py` — Δ(δ), AUDC, comparison tables |
+| Colab notebooks | 4 independent notebooks for each pipeline step |
+| Codebase restructure | Clean package layout (iql/, evaluation/, wrappers/, scripts/, notebooks/) |
+| Model checkpointing | `Learner.save()` for persisting trained models |
+| Comprehensive README | Background, methodology, results, usage |
 
-### Check-In 3 — Shift Evaluation & Analysis
-- ✅ Codebase restructured into clean package layout
-- ✅ Gravity shift wrapper implemented (`wrappers/gravity_shift.py`)
-- ✅ Observation noise wrapper implemented (`wrappers/observation_noise.py`)
-- ✅ TripleCritic integrated into main codebase (via `--num_critics=3` flag)
-- ✅ Shift evaluation pipeline built (`scripts/evaluate_shift.py`)
-- ✅ Robustness metrics computation (`scripts/compute_robustness.py`)
-- ✅ Full Colab notebook for end-to-end experiments (`notebooks/iql_shift_evaluation.ipynb`)
-- ✅ Model checkpointing added to training script
-- 🔶 Running shift evaluations across all environments and shift levels
-- 🔶 Computing Δ(δ) and AUDC across all conditions
-- 🔶 Building comparison tables (DoubleCritic vs TripleCritic under shift)
+### 🔶 Ready to Run (Code exists, needs execution)
+
+| Item | Command / Notebook | Est. Time |
+|---|---|---|
+| Baseline training on halfcheetah + walker2d | `01_train_baseline.ipynb` or CLI | ~40 min |
+| Q-ensemble training on halfcheetah + walker2d | `02_train_ensemble.ipynb` or CLI | ~40 min |
+| Shift evaluation (all envs × all shifts × 2Q/3Q) | `03_evaluate_shift.ipynb` or CLI | ~10 min |
+| Robustness analysis + plots | `04_analyze_results.ipynb` | ~1 min |
+| Multiple seeds (3 seeds for error bars) | Re-run with `SEED=0,1,2` | ~4 hrs total |
+
+### ❌ Not Implemented (mentioned in proposal)
+
+| Item | Difficulty | Notes |
+|---|---|---|
+| **Friction shift** wrapper | Easy (~15 lines) | `model.geom_friction *= scale` |
+| **Reward perturbation** wrapper | Easy (~15 lines) | Scale or add noise to rewards |
+| **Expectile τ ablation** | Trivial (config change) | Test τ ∈ {0.5, 0.7, 0.8, 0.9} under shift |
+| **Temperature β ablation** | Trivial (config change) | Test β ∈ {1.0, 3.0, 10.0} under shift |
+| **5-critic ablation** | Easy (~10 lines) | Add `QuintupleCritic` to value_net.py |
 
 ---
 
@@ -155,7 +161,7 @@ We extend IQL's `DoubleCritic` (2 Q-networks, `min(q1,q2)`) to a `TripleCritic` 
 
 ### Shift Evaluation Results
 
-*Pending — run `notebooks/iql_shift_evaluation.ipynb` on Colab.*
+*Pending — run notebooks or HPC scripts to generate.*
 
 ---
 
@@ -198,13 +204,17 @@ iql-robustness-analysis/
 │   ├── evaluate_shift.py             #   Evaluate under distribution shift
 │   └── compute_robustness.py         #   Compute Δ(δ), AUDC, comparison tables
 │
-├── notebooks/                        # Jupyter notebooks
-│   ├── iql_shift_evaluation.ipynb    #   Full pipeline (train → shift → plots)
+├── notebooks/                        # Jupyter notebooks (step-by-step)
+│   ├── 01_train_baseline.ipynb       #   Step 1: Train 2Q on all envs
+│   ├── 02_train_ensemble.ipynb       #   Step 2: Train 3Q on all envs
+│   ├── 03_evaluate_shift.ipynb       #   Step 3: Eval under shift → CSVs
+│   ├── 04_analyze_results.ipynb      #   Step 4: Plots + tables (no GPU)
+│   ├── iql_shift_evaluation.ipynb    #   All-in-one pipeline
 │   └── uday_q_ensemble_iql.ipynb     #   Original Q-ensemble experiments
 │
 ├── results/                          # Experiment results
-│   ├── results_baseline_iql.csv      #   Baseline IQL scores (hopper, 300k steps)
-│   ├── results_ensemble_iql.csv      #   Q-ensemble scores (hopper, 300k steps)
+│   ├── results_baseline_iql.csv      #   Baseline IQL scores (hopper, 300k)
+│   ├── results_ensemble_iql.csv      #   Q-ensemble scores (hopper, 300k)
 │   └── results_comparison.png        #   Learning curve comparison plot
 │
 ├── requirements.txt                  # Dependencies
@@ -216,19 +226,25 @@ iql-robustness-analysis/
 
 ## How to Run
 
-### Option 1: Google Colab (Recommended)
+### Option 1: SJSU HPC (Recommended)
 
-Open `notebooks/iql_shift_evaluation.ipynb` in Google Colab with GPU runtime. It runs the full pipeline end-to-end (~40 min on T4):
-1. Install dependencies
-2. Train baseline IQL (2Q) and Q-ensemble IQL (3Q)
-3. Evaluate under gravity shift and observation noise
-4. Compute robustness metrics
-5. Generate comparison plots and tables
+HPC is the best option — persistent storage, no disconnections, GPU access, and you can run all experiments in parallel via SLURM batch jobs.
 
-### Option 2: Local / CLI
-
-#### Install dependencies
+#### Setup on HPC
 ```bash
+# SSH into HPC
+ssh <your_sjsu_id>@coe-hpc1.sjsu.edu
+
+# Clone repo
+git clone -b sp1ffygeek_check_3 https://github.com/shloakk/iql-robustness-analysis.git
+cd iql-robustness-analysis
+
+# Create conda environment
+module load anaconda3
+conda create -n iql python=3.11 -y
+conda activate iql
+
+# Install dependencies
 pip install jax jaxlib flax optax
 pip install mujoco "gymnasium[mujoco]" gym
 pip install h5py tqdm matplotlib numpy scipy
@@ -236,53 +252,125 @@ pip install absl-py ml_collections tensorboardX tensorflow-probability
 pip install git+https://github.com/Farama-Foundation/d4rl@master
 ```
 
-#### Train baseline IQL (DoubleCritic)
+#### Submit batch jobs (run all experiments in parallel)
 ```bash
+# Create a SLURM script for each experiment
+cat > run_train.sh << 'EOF'
+#!/bin/bash
+#SBATCH --job-name=iql-train
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
+#SBATCH --time=02:00:00
+#SBATCH --mem=16G
+#SBATCH --output=logs/%j_%x.out
+
+module load anaconda3
+conda activate iql
+
+ENV_NAME=$1
+NUM_CRITICS=$2
+
 python scripts/train_offline.py \
-    --env_name=hopper-medium-v2 \
+    --env_name=${ENV_NAME} \
     --config=configs/mujoco_config.py \
-    --num_critics=2 \
-    --max_steps=300000
+    --num_critics=${NUM_CRITICS} \
+    --max_steps=300000 \
+    --save_dir=tmp/${ENV_NAME}_${NUM_CRITICS}Q
+EOF
+
+mkdir -p logs
+
+# Submit all 6 training jobs (3 envs × 2 critic configs)
+sbatch run_train.sh hopper-medium-v2 2
+sbatch run_train.sh hopper-medium-v2 3
+sbatch run_train.sh halfcheetah-medium-v2 2
+sbatch run_train.sh halfcheetah-medium-v2 3
+sbatch run_train.sh walker2d-medium-v2 2
+sbatch run_train.sh walker2d-medium-v2 3
 ```
 
-#### Train Q-ensemble IQL (TripleCritic)
+#### Submit shift evaluation jobs (after training completes)
 ```bash
-python scripts/train_offline.py \
-    --env_name=hopper-medium-v2 \
+cat > run_eval.sh << 'EOF'
+#!/bin/bash
+#SBATCH --job-name=iql-eval
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
+#SBATCH --time=00:30:00
+#SBATCH --mem=16G
+#SBATCH --output=logs/%j_%x.out
+
+module load anaconda3
+conda activate iql
+
+ENV_NAME=$1
+NUM_CRITICS=$2
+
+python scripts/evaluate_shift.py \
+    --env_name=${ENV_NAME} \
     --config=configs/mujoco_config.py \
-    --num_critics=3 \
-    --max_steps=300000
+    --num_critics=${NUM_CRITICS} \
+    --shift_type=both \
+    --save_dir=tmp/${ENV_NAME}_${NUM_CRITICS}Q \
+    --output_dir=results/
+EOF
+
+# Submit all 6 eval jobs
+for env in hopper-medium-v2 halfcheetah-medium-v2 walker2d-medium-v2; do
+    sbatch run_eval.sh $env 2
+    sbatch run_eval.sh $env 3
+done
 ```
 
-#### Evaluate under distribution shift
+#### Analyze results (runs instantly, no GPU needed)
 ```bash
-# Gravity shift
-python scripts/evaluate_shift.py \
-    --env_name=hopper-medium-v2 \
-    --config=configs/mujoco_config.py \
-    --shift_type=gravity \
-    --shift_levels="0.5,1.0,1.5,2.0" \
-    --num_critics=2
-
-# Observation noise
-python scripts/evaluate_shift.py \
-    --env_name=hopper-medium-v2 \
-    --config=configs/mujoco_config.py \
-    --shift_type=obs_noise \
-    --shift_levels="0.0,0.01,0.1,0.3" \
-    --num_critics=2
-
-# Both shift types at once
-python scripts/evaluate_shift.py \
-    --shift_type=both --num_critics=2
+python scripts/compute_robustness.py --results_dir=results/ --env_name=hopper-medium-v2
+python scripts/compute_robustness.py --results_dir=results/ --env_name=halfcheetah-medium-v2
+python scripts/compute_robustness.py --results_dir=results/ --env_name=walker2d-medium-v2
 ```
 
-#### Compute robustness metrics
+### Option 2: Google Colab
+
+Run the notebooks in order:
+
+| Step | Notebook | Runtime | GPU? |
+|---|---|---|---|
+| 1 | `notebooks/01_train_baseline.ipynb` | ~60 min | Yes (T4) |
+| 2 | `notebooks/02_train_ensemble.ipynb` | ~60 min | Yes (T4) |
+| 3 | `notebooks/03_evaluate_shift.ipynb` | ~10 min | Yes |
+| 4 | `notebooks/04_analyze_results.ipynb` | ~1 min | No |
+
+### Option 3: Local CLI
+
 ```bash
-python scripts/compute_robustness.py \
-    --results_dir=./results/ \
-    --env_name=hopper-medium-v2
+# Train baseline
+python scripts/train_offline.py --env_name=hopper-medium-v2 --config=configs/mujoco_config.py --num_critics=2
+
+# Train Q-ensemble
+python scripts/train_offline.py --env_name=hopper-medium-v2 --config=configs/mujoco_config.py --num_critics=3
+
+# Evaluate under shift
+python scripts/evaluate_shift.py --env_name=hopper-medium-v2 --shift_type=both --num_critics=2
+
+# Compute metrics
+python scripts/compute_robustness.py --results_dir=results/ --env_name=hopper-medium-v2
 ```
+
+---
+
+## HPC vs Colab Comparison
+
+| Feature | SJSU HPC | Google Colab |
+|---|---|---|
+| **Runtime limit** | Hours (configurable) | 90 min (free), 24h (Pro) |
+| **Disconnection risk** | None | Frequent on free tier |
+| **Parallel jobs** | ✅ 6+ jobs simultaneously | ❌ 1 notebook at a time |
+| **Persistent storage** | ✅ Home directory persists | ❌ Lost on disconnect |
+| **GPU** | ✅ (SLURM `--gres=gpu:1`) | ✅ (T4/V100) |
+| **Total time (all exps)** | ~2 hrs (parallel) | ~6 hrs (sequential) |
+| **Best for** | Full experiment sweep | Quick prototyping |
+
+**Recommendation:** Use HPC for the full experiment sweep (6 training + 6 eval jobs in parallel = ~2 hrs total). Use Colab only for quick debugging or if HPC is unavailable.
 
 ---
 
