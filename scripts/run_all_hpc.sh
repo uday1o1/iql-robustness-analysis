@@ -3,17 +3,13 @@
 # IQL Robustness Analysis — Full HPC Experiment Runner
 # =============================================================================
 #
-# This script submits ALL experiments to SLURM on SJSU HPC.
-# Total: 6 training jobs + 6 eval jobs + 18 ablation jobs = 30 jobs
-# Estimated wall time: ~2-3 hours (all run in parallel)
+# Submits all experiments to SLURM. Handles environment setup automatically.
 #
 # Usage:
 #   chmod +x scripts/run_all_hpc.sh
 #   ./scripts/run_all_hpc.sh
 #
-# Prerequisites:
-#   1. conda activate iql
-#   2. pip install all dependencies (see README.md)
+# No prerequisites — the script sets up conda and installs deps in each job.
 # =============================================================================
 
 set -e
@@ -23,24 +19,52 @@ cd "$PROJECT_DIR"
 
 mkdir -p logs results tmp
 
-echo "=============================================="
-echo "IQL Robustness Analysis — HPC Experiment Suite"
-echo "=============================================="
-echo "Project dir: $PROJECT_DIR"
-echo ""
-
 # =============================================================================
-# CONFIGURATION
+# CONFIGURATION — edit these as needed
 # =============================================================================
 ENVIRONMENTS="hopper-medium-v2 halfcheetah-medium-v2 walker2d-medium-v2"
 CRITIC_CONFIGS="2 3"
 MAX_STEPS=300000
-SEEDS="42"  # Add more seeds: "42 0 1" for error bars
+SEEDS="42"
+CONDA_ENV="iql"
+PARTITION="gpu"
+
+# Shared setup commands injected into every SLURM job
+SETUP_CMD="
+    # Load modules
+    module load anaconda3 2>/dev/null || true
+
+    # Create conda env if it doesn't exist
+    if ! conda info --envs | grep -q ${CONDA_ENV}; then
+        echo 'Creating conda environment ${CONDA_ENV}...'
+        conda create -n ${CONDA_ENV} python=3.11 -y
+    fi
+    conda activate ${CONDA_ENV}
+
+    # Install deps (pip is idempotent — skips already-installed packages)
+    pip install -q jax jaxlib flax optax
+    pip install -q mujoco 'gymnasium[mujoco]' gym
+    pip install -q h5py tqdm matplotlib numpy scipy
+    pip install -q absl-py ml_collections tensorboardX tensorflow-probability
+    pip install -q git+https://github.com/Farama-Foundation/d4rl@master 2>/dev/null || true
+
+    cd ${PROJECT_DIR}
+"
+
+echo "=============================================="
+echo "IQL Robustness — HPC Experiment Suite"
+echo "=============================================="
+echo "Project: $PROJECT_DIR"
+echo "Envs:    $ENVIRONMENTS"
+echo "Critics: $CRITIC_CONFIGS"
+echo "Seeds:   $SEEDS"
+echo "Steps:   $MAX_STEPS"
+echo ""
 
 # =============================================================================
-# PHASE 1: Training (6 jobs — 3 envs × 2 critic configs)
+# PHASE 1: Training (3 envs × 2 critic configs = 6 jobs)
 # =============================================================================
-echo "--- PHASE 1: Submitting training jobs ---"
+echo "--- Phase 1: Training ---"
 
 TRAIN_JOBS=""
 for env in $ENVIRONMENTS; do
@@ -51,7 +75,7 @@ for env in $ENVIRONMENTS; do
 
             JOB_ID=$(sbatch --parsable \
                 --job-name="$JOB_NAME" \
-                --partition=gpu \
+                --partition=$PARTITION \
                 --gres=gpu:1 \
                 --time=02:00:00 \
                 --mem=16G \
@@ -59,9 +83,7 @@ for env in $ENVIRONMENTS; do
                 --output="logs/%j_${JOB_NAME}.out" \
                 --error="logs/%j_${JOB_NAME}.err" \
                 --wrap="
-                    module load anaconda3 2>/dev/null || true
-                    conda activate iql 2>/dev/null || true
-                    cd $PROJECT_DIR
+                    ${SETUP_CMD}
                     python scripts/train_offline.py \
                         --env_name=${env} \
                         --config=configs/mujoco_config.py \
@@ -71,20 +93,19 @@ for env in $ENVIRONMENTS; do
                         --save_dir=${SAVE_DIR}
                 ")
 
-            echo "  Submitted: $JOB_NAME (Job $JOB_ID)"
+            echo "  $JOB_NAME -> Job $JOB_ID"
             TRAIN_JOBS="${TRAIN_JOBS}:${JOB_ID}"
         done
     done
 done
 
-# Remove leading colon
 TRAIN_JOBS="${TRAIN_JOBS#:}"
 
 # =============================================================================
-# PHASE 2: Shift Evaluation (6 jobs — depends on training)
+# PHASE 2: Shift Evaluation (depends on training)
 # =============================================================================
 echo ""
-echo "--- PHASE 2: Submitting shift evaluation jobs (after training) ---"
+echo "--- Phase 2: Shift Evaluation (waits for training) ---"
 
 EVAL_JOBS=""
 for env in $ENVIRONMENTS; do
@@ -95,7 +116,7 @@ for env in $ENVIRONMENTS; do
 
             JOB_ID=$(sbatch --parsable \
                 --job-name="$JOB_NAME" \
-                --partition=gpu \
+                --partition=$PARTITION \
                 --gres=gpu:1 \
                 --time=00:30:00 \
                 --mem=16G \
@@ -104,9 +125,7 @@ for env in $ENVIRONMENTS; do
                 --error="logs/%j_${JOB_NAME}.err" \
                 --dependency=afterok:${TRAIN_JOBS} \
                 --wrap="
-                    module load anaconda3 2>/dev/null || true
-                    conda activate iql 2>/dev/null || true
-                    cd $PROJECT_DIR
+                    ${SETUP_CMD}
                     python scripts/evaluate_shift.py \
                         --env_name=${env} \
                         --config=configs/mujoco_config.py \
@@ -118,7 +137,7 @@ for env in $ENVIRONMENTS; do
                         --output_dir=results/
                 ")
 
-            echo "  Submitted: $JOB_NAME (Job $JOB_ID, depends on training)"
+            echo "  $JOB_NAME -> Job $JOB_ID (after training)"
             EVAL_JOBS="${EVAL_JOBS}:${JOB_ID}"
         done
     done
@@ -127,10 +146,10 @@ done
 EVAL_JOBS="${EVAL_JOBS#:}"
 
 # =============================================================================
-# PHASE 3: Expectile τ Ablation (9 jobs — 3 envs × 3 τ values, 2Q only)
+# PHASE 3: Expectile τ Ablation (independent, 2Q only)
 # =============================================================================
 echo ""
-echo "--- PHASE 3: Submitting expectile τ ablation jobs ---"
+echo "--- Phase 3: Expectile τ Ablation ---"
 
 TAU_VALUES="0.5 0.8 0.9"
 ABLATION_JOBS=""
@@ -138,12 +157,12 @@ ABLATION_JOBS=""
 for env in $ENVIRONMENTS; do
     for tau in $TAU_VALUES; do
         for seed in $SEEDS; do
-            JOB_NAME="ablation_tau${tau}_${env}_s${seed}"
-            SAVE_DIR="tmp/ablation_tau${tau}_${env}_s${seed}"
+            JOB_NAME="abl_tau${tau}_${env}_s${seed}"
+            SAVE_DIR="tmp/abl_tau${tau}_${env}_s${seed}"
 
             JOB_ID=$(sbatch --parsable \
                 --job-name="$JOB_NAME" \
-                --partition=gpu \
+                --partition=$PARTITION \
                 --gres=gpu:1 \
                 --time=02:00:00 \
                 --mem=16G \
@@ -151,9 +170,8 @@ for env in $ENVIRONMENTS; do
                 --output="logs/%j_${JOB_NAME}.out" \
                 --error="logs/%j_${JOB_NAME}.err" \
                 --wrap="
-                    module load anaconda3 2>/dev/null || true
-                    conda activate iql 2>/dev/null || true
-                    cd $PROJECT_DIR
+                    ${SETUP_CMD}
+
                     python scripts/train_offline.py \
                         --env_name=${env} \
                         --config=configs/mujoco_config.py \
@@ -175,50 +193,44 @@ for env in $ENVIRONMENTS; do
                         --output_dir=results/ablation_tau/
                 ")
 
-            echo "  Submitted: $JOB_NAME (Job $JOB_ID)"
+            echo "  $JOB_NAME -> Job $JOB_ID"
             ABLATION_JOBS="${ABLATION_JOBS}:${JOB_ID}"
         done
     done
 done
 
+ABLATION_JOBS="${ABLATION_JOBS#:}"
+
 # =============================================================================
-# PHASE 4: Analysis (runs after all eval jobs complete)
+# PHASE 4: Analysis (after all evals finish)
 # =============================================================================
 echo ""
-echo "--- PHASE 4: Submitting analysis job (after all evals) ---"
+echo "--- Phase 4: Analysis (waits for all evals) ---"
 
-ALL_DEPS="${EVAL_JOBS}:${ABLATION_JOBS#:}"
+ALL_DEPS="${EVAL_JOBS}:${ABLATION_JOBS}"
 
 sbatch \
-    --job-name="analyze_results" \
+    --job-name="analyze" \
     --partition=cpu \
     --time=00:10:00 \
     --mem=4G \
     --output="logs/%j_analyze.out" \
     --dependency=afterok:${ALL_DEPS} \
     --wrap="
-        module load anaconda3 2>/dev/null || true
-        conda activate iql 2>/dev/null || true
-        cd $PROJECT_DIR
+        ${SETUP_CMD}
         for env in $ENVIRONMENTS; do
+            echo \"--- \$env ---\"
             python scripts/compute_robustness.py \
                 --results_dir=results/ \
                 --env_name=\$env
         done
-        echo 'Analysis complete. Check results/ for CSVs.'
+        echo ''
+        echo 'Done. Results in results/'
     "
 
 echo ""
 echo "=============================================="
-echo "All jobs submitted!"
+echo "All jobs submitted. Monitor with: squeue -u \$USER"
+echo "Logs: logs/"
+echo "Results: results/"
 echo "=============================================="
-echo ""
-echo "Monitor with: squeue -u \$USER"
-echo "Check logs:   ls logs/"
-echo "Results in:   results/"
-echo ""
-echo "Job summary:"
-echo "  Training:   $(echo $TRAIN_JOBS | tr ':' '\n' | wc -l | tr -d ' ') jobs"
-echo "  Evaluation: $(echo $EVAL_JOBS | tr ':' '\n' | wc -l | tr -d ' ') jobs"
-echo "  Ablation:   $(echo $ABLATION_JOBS | tr ':' '\n' | wc -l | tr -d ' ') jobs"
-echo "  Analysis:   1 job"
