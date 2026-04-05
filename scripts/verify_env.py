@@ -8,8 +8,15 @@ This checks every import used by the IQL codebase and reports
 all failures at once instead of one at a time.
 """
 
+import os
 import sys
 import importlib
+
+# Ensure project root is on path and D4RL warnings are suppressed
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+os.environ['D4RL_SUPPRESS_IMPORT_ERROR'] = '1'
 
 PASS = 0
 FAIL = 0

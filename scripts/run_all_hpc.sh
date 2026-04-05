@@ -80,6 +80,11 @@ activate_env() {
         echo "  bash scripts/run_all_hpc.sh setup"
         exit 1
     fi
+
+    # Ensure project root is on PYTHONPATH for 'import iql'
+    export PYTHONPATH="${PROJECT_DIR}:${PYTHONPATH:-}"
+    # Suppress D4RL warnings for envs we don't use (mujoco_py, flow, etc.)
+    export D4RL_SUPPRESS_IMPORT_ERROR=1
 }
 
 # ─────────────────────────────────────────────────────────────────────
@@ -155,6 +160,15 @@ setup_environment() {
     pip install --no-deps git+https://github.com/Farama-Foundation/d4rl@master 2>/dev/null || \
         pip install --no-deps d4rl 2>/dev/null || \
         echo "WARNING: D4RL install failed"
+
+    # Install the IQL package itself in editable mode so 'import iql' works
+    echo ""
+    echo "Installing IQL package (editable)..."
+    pip install -e "${PROJECT_DIR}" 2>/dev/null || \
+        echo "WARNING: editable install failed — will use PYTHONPATH instead"
+
+    # Set D4RL env var to suppress import warnings for envs we don't use
+    export D4RL_SUPPRESS_IMPORT_ERROR=1
 
     # Run full verification
     echo ""
