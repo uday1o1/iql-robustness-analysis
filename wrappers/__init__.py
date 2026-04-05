@@ -1,2 +1,4 @@
 from wrappers.episode_monitor import EpisodeMonitor
 from wrappers.single_precision import SinglePrecision
+from wrappers.gravity_wrapper import GravityWrapper
+from wrappers.observation_noise import ObservationNoise
