@@ -113,35 +113,35 @@ setup_environment() {
 
     echo ""
     echo "Installing dependencies..."
-    echo "  (each C-extension package installed individually with --only-binary)"
     echo ""
 
-    # Install each C-extension package one at a time with --only-binary
-    # for THAT package. This forces binary wheels while letting pip's
-    # build isolation handle transitive deps normally.
-    for pkg in \
-        "numpy==1.26.4" \
-        "scipy==1.13.1" \
-        "h5py==3.11.0" \
-        "ml_dtypes==0.4.1" \
-        "jaxlib==0.4.35" \
-        "jax==0.4.35" \
-        "mujoco==3.1.6" \
-        "matplotlib==3.9.2" \
-    ; do
-        name=$(echo "$pkg" | cut -d= -f1)
-        echo "  Installing $pkg ..."
-        pip install --only-binary="$name" "$pkg" || \
-            echo "  WARNING: $pkg install failed"
-    done
+    # Download all wheels first (binary only, no source builds).
+    # This ensures pip never tries to compile anything.
+    WHEEL_DIR="${PROJECT_DIR}/.wheels"
+    mkdir -p "$WHEEL_DIR"
 
-    # Pure Python packages — install normally
+    echo "  Downloading binary wheels..."
+    pip download --only-binary=:all: --dest "$WHEEL_DIR" \
+        numpy==1.26.4 scipy==1.13.1 h5py==3.11.0 \
+        jax==0.4.35 jaxlib==0.4.35 ml_dtypes==0.4.1 \
+        mujoco==3.1.6 matplotlib==3.9.2 \
+        flax==0.8.5 optax==0.2.3 \
+        tensorflow-probability==0.23.0
+
+    echo ""
+    echo "  Installing from downloaded wheels..."
+    pip install --no-index --find-links="$WHEEL_DIR" \
+        numpy==1.26.4 scipy==1.13.1 h5py==3.11.0 \
+        jax==0.4.35 jaxlib==0.4.35 ml_dtypes==0.4.1 \
+        mujoco==3.1.6 matplotlib==3.9.2 \
+        flax==0.8.5 optax==0.2.3 \
+        tensorflow-probability==0.23.0
+
+    # Pure Python packages — install normally from PyPI
     echo ""
     echo "  Installing pure Python packages..."
     pip install \
-        flax==0.8.5 optax==0.2.3 \
         gymnasium==0.29.1 \
-        tensorflow-probability==0.23.0 \
         absl-py==2.1.0 ml_collections==0.1.1 \
         tensorboardX==2.6.2.2 tqdm==4.66.5
 

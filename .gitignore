@@ -27,6 +27,7 @@ __pypackages__/
 .tox/
 .venv
 .webassets-cache
+.wheels/
 *.cover
 *.egg
 *.egg-info/
