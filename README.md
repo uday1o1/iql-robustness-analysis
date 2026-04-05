@@ -6,12 +6,12 @@
 
 ## Team
 
-| Student | SJSU ID | Role |
-|---|---|---|
-| Joao Lucas Veras | 015555345 | Baseline IQL reproduction |
-| Shloak Aggarwal | 018189938 | Distribution shift design |
-| Pramod Yadav | 019142370 | Evaluation metrics & literature survey |
-| Uday Arora | 019098404 | Q-ensemble extension |
+| Student | Role |
+|---|---|
+| Joao Lucas Veras | Baseline IQL reproduction |
+| Shloak Aggarwal | Distribution shift design |
+| Pramod Yadav | Evaluation metrics & literature survey |
+| Uday Arora | Q-ensemble extension |
 
 ---
 
@@ -188,39 +188,48 @@ iql-robustness-analysis/
 
 ## Running Experiments
 
-### On SJSU HPC (recommended)
+### On SJSU CoE HPC (recommended)
+
+The SJSU College of Engineering HPC uses SLURM for job scheduling. Connect via
+VPN if off-campus, then SSH in. The script is self-contained and will install
+Miniconda and all dependencies automatically if they are not already present.
 
 ```bash
-# 1. SSH in and clone
-ssh <sjsu_id>@coe-hpc1.sjsu.edu
+# 1. SSH in (use coe-hpc1 if coe-hpc times out over VPN)
+ssh <sjsu_id>@coe-hpc.sjsu.edu
+
+# 2. Clone and submit
 git clone -b sp1ffygeek_check_3 https://github.com/shloakk/iql-robustness-analysis.git
 cd iql-robustness-analysis
+mkdir -p logs
+sbatch scripts/run_all_hpc.sh          # full pipeline
+# or run individual steps:
+# sbatch scripts/run_all_hpc.sh setup    # env setup only
+# sbatch scripts/run_all_hpc.sh train    # training only
+# sbatch scripts/run_all_hpc.sh eval     # shift evaluation only
+# sbatch scripts/run_all_hpc.sh analyze  # compute metrics only
 
-# 2. Set up environment
-module load anaconda3
-conda create -n iql python=3.11 -y
-conda activate iql
-pip install jax jaxlib flax optax
-pip install mujoco "gymnasium[mujoco]" gym
-pip install h5py tqdm matplotlib numpy scipy
-pip install absl-py ml_collections tensorboardX tensorflow-probability
-pip install git+https://github.com/Farama-Foundation/d4rl@master
-
-# 3. Run everything
-chmod +x scripts/run_all_hpc.sh
-./scripts/run_all_hpc.sh
-
-# 4. Monitor
-squeue -u $USER
+# 3. Monitor
+squeue -u $USER                        # check job status
+tail -f logs/slurm_<job_id>.out        # watch output
 ```
 
-The HPC script handles:
-- **Phase 1:** Training — 6 jobs (3 envs × 2 critic configs), ~20 min each
-- **Phase 2:** Shift evaluation — 6 jobs (all 4 shift types per job), depends on Phase 1
-- **Phase 3:** Expectile τ ablation — 9 jobs (3 envs × 3 τ values), runs in parallel
-- **Phase 4:** Analysis — 1 job, computes metrics after all evals finish
+For interactive testing (useful for debugging before submitting a batch job):
 
-Total wall time: ~2 hours with parallel execution.
+```bash
+srun -p gpu --gres=gpu -n 1 -N 1 -c 4 --pty /bin/bash
+bash scripts/run_all_hpc.sh setup      # set up env interactively
+```
+
+The script runs sequentially within a single SLURM job:
+- **Phase 1:** Training — 6 runs (3 envs x 2 critic configs), ~20 min each
+- **Phase 2:** Shift evaluation — 6 runs (all 4 shift types per model)
+- **Phase 3:** Expectile tau ablation — 9 runs (3 envs x 3 tau values)
+- **Phase 4:** Analysis — computes robustness metrics from CSVs
+
+HPC partitions: `gpu` (P100/A100/H100, 48h max), `compute` (CPU only, 24h max),
+`condo` (preemptible). The script defaults to the `gpu` partition with a 24h
+time limit, which is sufficient for the full pipeline.
 
 ### On Google Colab
 
