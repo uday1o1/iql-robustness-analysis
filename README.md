@@ -191,9 +191,9 @@ iql-robustness-analysis/
 ### On SJSU CoE HPC (recommended)
 
 The SJSU College of Engineering HPC uses SLURM for job scheduling. Connect via
-VPN if off-campus, then SSH in. Setup is a two-step process: install
-dependencies once on the login node (which has internet access), then submit
-batch jobs to GPU nodes.
+VPN if off-campus, then SSH in. Setup requires a GPU node (the login node has
+GLIBC 2.17 which is too old for pip to install numpy/scipy/JAX). The `/home`
+directory is shared across all nodes, so the venv persists after setup.
 
 ```bash
 # 1. SSH in (use coe-hpc1 if coe-hpc times out over VPN)
@@ -203,11 +203,12 @@ ssh <sjsu_id>@coe-hpc.sjsu.edu
 git clone -b sp1ffygeek_check_3 https://github.com/shloakk/iql-robustness-analysis.git
 cd iql-robustness-analysis
 
-# 3. One-time setup (run on login node — installs Miniconda + deps)
+# 3. One-time setup on a GPU node (interactive session)
+srun -p gpu --gres=gpu -n 1 -N 1 -c 4 --mem=16G --time=01:00:00 --pty /bin/bash
 bash scripts/run_all_hpc.sh setup
-# If prompted, log out and back in to activate conda, then re-run setup.
+exit   # leave the interactive session
 
-# 4. Submit experiments to GPU nodes
+# 4. Submit experiments (from the login node)
 mkdir -p logs
 sbatch scripts/run_all_hpc.sh          # full pipeline
 # or run individual steps:
@@ -220,10 +221,9 @@ squeue -u $USER                        # check job status
 tail -f logs/slurm_<job_id>.out        # watch output
 ```
 
-The setup step installs Miniconda in your home directory (if not already
-present), creates a conda environment with Python 3.11, and installs all
-dependencies. This only needs to be done once — the `/home` directory is
-shared across all HPC nodes, so batch jobs can activate the same conda env.
+The setup step creates a Python venv using the system Python 3.11 and installs
+all dependencies via pip. This only needs to be done once — the `/home`
+directory is shared across all HPC nodes, so batch jobs activate the same venv.
 
 The batch job runs sequentially within a single SLURM allocation:
 - **Phase 1:** Training — 6 runs (3 envs x 2 critic configs), ~20 min each

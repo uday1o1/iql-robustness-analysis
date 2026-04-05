@@ -12,18 +12,21 @@
 #
 # IQL Robustness Analysis — SJSU CoE HPC Experiment Runner
 #
-# FIRST TIME SETUP (run once on the login node, NOT as a batch job):
+# FIRST TIME SETUP (run once on a GPU node via interactive session):
+#   srun -p gpu --gres=gpu -n 1 -N 1 -c 4 --mem=16G --time=01:00:00 --pty /bin/bash
 #   bash scripts/run_all_hpc.sh setup
+#   exit
 #
-# Then submit experiments:
+# Then submit experiments from the login node:
 #   sbatch scripts/run_all_hpc.sh            # full pipeline
 #   sbatch scripts/run_all_hpc.sh train      # training only
 #   sbatch scripts/run_all_hpc.sh eval       # evaluation only
 #   sbatch scripts/run_all_hpc.sh analyze    # analysis only
 #
-# Uses the system Python 3.11 (module load python3) with a venv.
-# All pip installs use --only-binary to avoid C compilation issues
-# on the login node (GLIBC 2.17 / CentOS 7).
+# Setup must run on a GPU node (not the login node) because the login
+# node has GLIBC 2.17 which is too old for numpy/scipy/JAX wheels.
+# GPU nodes have newer GLIBC and GCC. The /home directory is shared
+# across all nodes, so the venv created on a GPU node works everywhere.
 
 set -euo pipefail
 
@@ -85,13 +88,19 @@ activate_env() {
 setup_environment() {
     echo ""
     echo ">>> One-time environment setup"
-    echo ">>> Run this on the LOGIN NODE (not as sbatch)"
+    echo ">>> Run this on a GPU NODE (interactive session), not the login node."
+    echo ">>> The login node has GLIBC 2.17 which is too old for pip wheels."
+    echo ""
+    echo ">>> If you're on the login node, first get a GPU node:"
+    echo ">>>   srun -p gpu --gres=gpu -n 1 -N 1 -c 4 --mem=16G --time=01:00:00 --pty /bin/bash"
     echo ""
 
     module load python3 2>/dev/null || true
+    module load cuda 2>/dev/null || true
 
-    echo "System Python: $(python3 --version 2>&1)"
-    echo "GLIBC: $(ldd --version 2>&1 | head -1)"
+    echo "Python: $(python3 --version 2>&1)"
+    echo "GLIBC:  $(ldd --version 2>&1 | head -1)"
+    echo "Node:   $(hostname)"
     echo ""
 
     # Create venv
@@ -102,40 +111,21 @@ setup_environment() {
 
     source "${VENV_DIR}/bin/activate"
     echo "Activated venv: $(which python)"
-    echo "Python: $(python --version)"
 
-    # Upgrade pip and install wheel/setuptools
+    # Upgrade pip
     pip install --upgrade pip setuptools wheel
 
-    # The login node runs CentOS 7 (GLIBC 2.17) with no C compiler.
-    # We MUST use --only-binary=:all: for all packages that have C
-    # extensions to avoid build failures. If a binary wheel is not
-    # available for this platform, we pin to an older version that does.
+    # Install all dependencies (GPU nodes have proper GLIBC and GCC)
     echo ""
-    echo "Installing dependencies (binary wheels only, no compilation)..."
+    echo "Installing JAX and dependencies..."
+    pip install numpy scipy h5py
+    pip install jax jaxlib flax optax
 
-    # Core numerical packages first (need manylinux2014 wheels)
-    pip install --only-binary=:all: numpy scipy h5py 2>/dev/null || \
-        pip install --only-binary=:all: "numpy<2.0" "scipy<1.12" "h5py<3.11" || \
-        echo "WARNING: numpy/scipy/h5py binary install had issues"
-
-    # JAX ecosystem
-    pip install --only-binary=:all: ml_dtypes 2>/dev/null || \
-        pip install --only-binary=:all: "ml_dtypes<0.4.0" 2>/dev/null || true
-    pip install --only-binary=:all: jax jaxlib 2>/dev/null || \
-        pip install --only-binary=:all: "jax<0.4.26" "jaxlib<0.4.26" 2>/dev/null || \
-        pip install jax jaxlib
-    pip install flax optax
-
-    # MuJoCo and Gymnasium
     echo ""
     echo "Installing MuJoCo and Gymnasium..."
-    pip install --only-binary=:all: mujoco 2>/dev/null || \
-        pip install mujoco
-    pip install "gymnasium[mujoco]"
+    pip install mujoco "gymnasium[mujoco]"
     pip install gym 2>/dev/null || true
 
-    # Other deps (pure Python packages don't need --only-binary)
     echo ""
     echo "Installing other dependencies..."
     pip install tqdm matplotlib
@@ -143,7 +133,6 @@ setup_environment() {
     pip install tensorflow-probability 2>/dev/null || \
         echo "WARNING: tensorflow-probability install had issues"
 
-    # D4RL
     echo ""
     echo "Installing D4RL..."
     pip install git+https://github.com/Farama-Foundation/d4rl@master 2>/dev/null || \
