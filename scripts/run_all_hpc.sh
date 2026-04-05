@@ -146,7 +146,7 @@ setup_environment() {
     echo ""
     echo "  Installing pure Python packages..."
     pip install \
-        gymnasium==0.29.1 \
+        gymnasium==0.29.1 imageio \
         absl-py==2.1.0 ml_collections==0.1.1 \
         tensorboardX==2.6.2.2 tqdm==4.66.5
 
