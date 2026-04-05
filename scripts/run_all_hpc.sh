@@ -21,17 +21,15 @@
 #   sbatch scripts/run_all_hpc.sh eval       # evaluation only
 #   sbatch scripts/run_all_hpc.sh analyze    # analysis only
 #
-# The setup step installs Miniconda (Python 3.11) in your home directory
-# and creates a conda env with all dependencies. This only needs to be
-# done once. GPU nodes share /home so the env is available everywhere.
+# Uses the system Python 3.11 (module load python3) with a venv.
+# All pip installs use --only-binary to avoid C compilation issues
+# on the login node (GLIBC 2.17 / CentOS 7).
 
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────
-ENV_NAME="iql"
-PYTHON_VERSION="3.11"
 ENVIRONMENTS="hopper-medium-v2 halfcheetah-medium-v2 walker2d-medium-v2"
 CRITIC_CONFIGS="2 3"
 MAX_STEPS=300000
@@ -52,6 +50,8 @@ cd "$PROJECT_DIR"
 
 mkdir -p logs results tmp
 
+VENV_DIR="${PROJECT_DIR}/venv"
+
 echo "============================================"
 echo "IQL Robustness Analysis — HPC Job"
 echo "============================================"
@@ -62,40 +62,21 @@ echo "Date:        $(date)"
 echo "============================================"
 
 # ─────────────────────────────────────────────────────────────────────
-# CONDA INIT HELPER
-# ─────────────────────────────────────────────────────────────────────
-init_conda() {
-    # Try to find and initialize conda
-    for CONDA_DIR in ~/miniconda3 ~/anaconda3; do
-        if [ -f "${CONDA_DIR}/etc/profile.d/conda.sh" ]; then
-            source "${CONDA_DIR}/etc/profile.d/conda.sh"
-            return 0
-        fi
-    done
-    return 1
-}
-
-# ─────────────────────────────────────────────────────────────────────
 # ENVIRONMENT ACTIVATION (used by batch jobs)
 # ─────────────────────────────────────────────────────────────────────
 activate_env() {
+    module load python3 2>/dev/null || true
     module load cuda 2>/dev/null || true
 
-    if ! init_conda; then
-        echo "ERROR: Conda not found. Run setup first on the login node:"
+    if [ -f "${VENV_DIR}/bin/activate" ]; then
+        source "${VENV_DIR}/bin/activate"
+        echo "Activated venv: $(python --version)"
+    else
+        echo "ERROR: venv not found at ${VENV_DIR}"
+        echo "Run setup first on the login node:"
         echo "  bash scripts/run_all_hpc.sh setup"
         exit 1
     fi
-
-    if ! conda env list 2>/dev/null | grep -q "^${ENV_NAME} "; then
-        echo "ERROR: Conda env '${ENV_NAME}' not found. Run setup first:"
-        echo "  bash scripts/run_all_hpc.sh setup"
-        exit 1
-    fi
-
-    conda activate "${ENV_NAME}" 2>/dev/null || source activate "${ENV_NAME}"
-    echo "Activated conda env: ${ENV_NAME}"
-    python --version
 }
 
 # ─────────────────────────────────────────────────────────────────────
@@ -107,45 +88,46 @@ setup_environment() {
     echo ">>> Run this on the LOGIN NODE (not as sbatch)"
     echo ""
 
-    # Step 1: Install Miniconda if not present
-    if ! init_conda; then
-        echo "Conda not found. Installing Miniconda..."
-        INSTALLER="/tmp/miniconda_installer_$$.sh"
-        wget -q "https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh" \
-            -O "$INSTALLER"
-        bash "$INSTALLER" -b -p ~/miniconda3
-        rm -f "$INSTALLER"
-        source ~/miniconda3/etc/profile.d/conda.sh
-        conda init bash 2>/dev/null || true
-        echo ""
-        echo "Miniconda installed at ~/miniconda3"
-        echo "You may need to log out and back in, or run:"
-        echo "  source ~/miniconda3/etc/profile.d/conda.sh"
-        echo ""
-    else
-        echo "Conda found: $(conda --version)"
+    module load python3 2>/dev/null || true
+
+    echo "System Python: $(python3 --version 2>&1)"
+    echo "GLIBC: $(ldd --version 2>&1 | head -1)"
+    echo ""
+
+    # Create venv
+    if [ ! -d "${VENV_DIR}" ]; then
+        echo "Creating virtual environment..."
+        python3 -m venv "${VENV_DIR}"
     fi
 
-    # Step 2: Create conda env with Python 3.11
-    if ! conda env list | grep -q "^${ENV_NAME} "; then
-        echo "Creating conda environment: ${ENV_NAME} (python ${PYTHON_VERSION})"
-        conda create -n "${ENV_NAME}" python="${PYTHON_VERSION}" -y
-    else
-        echo "Conda env '${ENV_NAME}' already exists"
-    fi
-
-    # Step 3: Activate and install deps
-    conda activate "${ENV_NAME}" 2>/dev/null || source activate "${ENV_NAME}"
+    source "${VENV_DIR}/bin/activate"
+    echo "Activated venv: $(which python)"
     echo "Python: $(python --version)"
-    echo "pip:    $(pip --version)"
+
+    # Upgrade pip and install wheel/setuptools
+    pip install --upgrade pip setuptools wheel
+
+    # Install packages using only pre-built binary wheels where possible.
+    # This avoids C compilation issues on the login node (old GLIBC).
+    echo ""
+    echo "Installing JAX (CPU-only wheels for setup, GPU at runtime)..."
+    pip install --only-binary=:all: ml_dtypes 2>/dev/null || \
+        pip install "ml_dtypes<0.5.0" 2>/dev/null || \
+        echo "WARNING: ml_dtypes install had issues, continuing..."
+
+    pip install jax jaxlib flax optax
 
     echo ""
-    echo "Installing dependencies..."
-    pip install --upgrade pip
-    pip install jax jaxlib flax optax
-    pip install mujoco "gymnasium[mujoco]" gym
+    echo "Installing MuJoCo and Gymnasium..."
+    pip install mujoco "gymnasium[mujoco]"
+    pip install gym 2>/dev/null || true
+
+    echo ""
+    echo "Installing other dependencies..."
     pip install h5py tqdm matplotlib numpy scipy
-    pip install absl-py ml_collections tensorboardX tensorflow-probability
+    pip install absl-py ml_collections tensorboardX
+    pip install tensorflow-probability 2>/dev/null || \
+        echo "WARNING: tensorflow-probability install had issues"
 
     echo ""
     echo "Installing D4RL..."
@@ -158,18 +140,27 @@ setup_environment() {
     python -c "
 import sys
 print(f'Python:     {sys.version.split()[0]}')
-import jax
-print(f'JAX:        {jax.__version__}')
-import flax
-print(f'Flax:       {flax.__version__}')
-import gymnasium
-print(f'Gymnasium:  {gymnasium.__version__}')
-print('All dependencies installed successfully.')
+try:
+    import jax; print(f'JAX:        {jax.__version__}')
+except Exception as e:
+    print(f'JAX:        import error (may work on GPU node): {e}')
+try:
+    import flax; print(f'Flax:       {flax.__version__}')
+except Exception as e:
+    print(f'Flax:       {e}')
+try:
+    import gymnasium; print(f'Gymnasium:  {gymnasium.__version__}')
+except Exception as e:
+    print(f'Gymnasium:  {e}')
+try:
+    import mujoco; print(f'MuJoCo:     {mujoco.__version__}')
+except Exception as e:
+    print(f'MuJoCo:     {e}')
 "
 
     echo ""
     echo "============================================"
-    echo "Setup complete. Now submit a batch job:"
+    echo "Setup complete. Submit experiments with:"
     echo "  sbatch scripts/run_all_hpc.sh"
     echo "  sbatch scripts/run_all_hpc.sh train"
     echo "============================================"
