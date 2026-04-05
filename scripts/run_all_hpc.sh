@@ -113,28 +113,31 @@ setup_environment() {
 
     echo ""
     echo "Installing dependencies..."
+    echo "  (each C-extension package installed individually with --only-binary)"
     echo ""
 
-    # IMPORTANT: Install order matters on this HPC.
-    # The login node has GLIBC 2.17 and no GCC, so we must use
-    # pre-built binary wheels for C-extension packages.
-    #
-    # Step 1: Install numpy first (many packages need it as build dep)
-    echo "Step 1/5: numpy..."
-    pip install --only-binary=numpy numpy==1.26.4
+    # Install each C-extension package one at a time with --only-binary
+    # for THAT package. This forces binary wheels while letting pip's
+    # build isolation handle transitive deps normally.
+    for pkg in \
+        "numpy==1.26.4" \
+        "scipy==1.13.1" \
+        "h5py==3.11.0" \
+        "ml_dtypes==0.4.1" \
+        "jaxlib==0.4.35" \
+        "jax==0.4.35" \
+        "mujoco==3.1.6" \
+        "matplotlib==3.9.2" \
+    ; do
+        name=$(echo "$pkg" | cut -d= -f1)
+        echo "  Installing $pkg ..."
+        pip install --only-binary="$name" "$pkg" || \
+            echo "  WARNING: $pkg install failed"
+    done
 
-    # Step 2: Install other C-extension packages with --only-binary
-    # Use --no-build-isolation so they use the numpy we just installed
-    # instead of trying to compile a fresh numpy in a temp venv.
-    echo "Step 2/5: C-extension packages..."
-    pip install --only-binary=scipy,h5py,jax,jaxlib,ml_dtypes,mujoco,matplotlib \
-        --no-build-isolation \
-        scipy==1.13.1 h5py==3.11.0 \
-        jax==0.4.35 jaxlib==0.4.35 ml_dtypes==0.4.1 \
-        mujoco==3.1.6 matplotlib==3.9.2
-
-    # Step 3: Pure Python packages (no binary wheels needed)
-    echo "Step 3/5: Pure Python packages..."
+    # Pure Python packages — install normally
+    echo ""
+    echo "  Installing pure Python packages..."
     pip install \
         flax==0.8.5 optax==0.2.3 \
         gymnasium==0.29.1 \
@@ -142,8 +145,8 @@ setup_environment() {
         absl-py==2.1.0 ml_collections==0.1.1 \
         tensorboardX==2.6.2.2 tqdm==4.66.5
 
-    # Step 4: gym (legacy API, needed by D4RL)
-    echo "Step 4/5: gym..."
+    # gym (legacy API, needed by D4RL)
+    echo "  Installing gym..."
     pip install "gym==0.23.1" 2>/dev/null || pip install gym 2>/dev/null || true
 
     # D4RL — install without its heavy deps (mujoco-py, etc.)
