@@ -18,7 +18,7 @@ h5py==3.11.0
 # MuJoCo / Gym
 mujoco==3.1.6
 gymnasium==0.29.1
-gym==0.23.1
+# gym is installed separately (not via --only-binary) — see run_all_hpc.sh
 
 # D4RL (install separately with --no-deps after this file)
 # pip install --no-deps git+https://github.com/Farama-Foundation/d4rl@master

@@ -119,8 +119,12 @@ setup_environment() {
     # Install all pinned deps as binary wheels
     pip install --only-binary=:all: -r requirements-hpc.txt
 
+    # gym is pure Python but not in requirements-hpc.txt (--only-binary blocks it)
+    echo ""
+    echo "Installing gym (needed by D4RL)..."
+    pip install "gym==0.23.1" 2>/dev/null || pip install gym 2>/dev/null || true
+
     # D4RL — install without its heavy deps (mujoco-py, etc.)
-    # We already have mujoco, gymnasium, and gym installed above.
     echo ""
     echo "Installing D4RL (no-deps to avoid mujoco-py compilation)..."
     pip install --no-deps git+https://github.com/Farama-Foundation/d4rl@master 2>/dev/null || \
