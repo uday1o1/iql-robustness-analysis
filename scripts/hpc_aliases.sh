@@ -24,6 +24,7 @@ alias iql-analyze='sbatch scripts/run_all_hpc.sh analyze'
 alias lastlog='ls -t logs/slurm_*.out 2>/dev/null | head -1 | xargs tail -f'
 alias lasterr='ls -t logs/slurm_*.err 2>/dev/null | head -1 | xargs tail -f'
 alias alllogs='ls -lt logs/slurm_*.out 2>/dev/null | head -10'
+alias clearlogs='rm -f logs/slurm_*.out logs/slurm_*.err logs/*.out logs/*.err && echo "Logs cleared"'
 
 # ─── Results ─────────────────────────────────────────────────────────
 alias results='ls -la results/*.csv 2>/dev/null'
@@ -38,11 +39,12 @@ alias gpus='sinfo -p gpu -N -l'
 alias quota='df -h /home/$USER'
 
 echo "IQL HPC aliases loaded. Commands:"
-echo "  jobs / myjobs    — check job status"
-echo "  killall          — cancel all your jobs"
-echo "  iql-setup        — one-time environment setup"
-echo "  iql-run          — submit full pipeline"
-echo "  iql-train        — submit training only"
-echo "  iql-eval         — submit evaluation only"
+echo "  jobs / myjobs     — check job status"
+echo "  killall           — cancel all your jobs"
+echo "  iql-setup         — one-time environment setup"
+echo "  iql-run           — submit full pipeline"
+echo "  iql-train         — submit training only"
+echo "  iql-eval          — submit evaluation only"
 echo "  lastlog / lasterr — tail latest log/error"
-echo "  gpunode           — get interactive GPU session"
+echo "  clearlogs         — delete all log files"
+echo "  gpunode            — get interactive GPU session"

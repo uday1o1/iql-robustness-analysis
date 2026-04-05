@@ -254,6 +254,7 @@ source scripts/hpc_aliases.sh    # load once per session
 | `iql-analyze` | Submit analysis only |
 | `lastlog` | Tail the latest output log |
 | `lasterr` | Tail the latest error log |
+| `clearlogs` | Delete all log files |
 | `gpunode` | Get an interactive GPU session |
 | `results` | List result CSVs |
 
