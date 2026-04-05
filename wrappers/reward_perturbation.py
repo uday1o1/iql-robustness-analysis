@@ -31,8 +31,13 @@ class RewardPerturbation(gym.Wrapper):
         self.noise_std = noise_std
         self.scale = scale
 
-    def step(self, action: np.ndarray) -> TimeStep:
-        observation, reward, done, info = self.env.step(action)
+    def step(self, action: np.ndarray):
+        step_result = self.env.step(action)
+        if len(step_result) == 5:
+            observation, reward, terminated, truncated, info = step_result
+            done = terminated or truncated
+        else:
+            observation, reward, done, info = step_result
         # Apply perturbation
         perturbed_reward = self.scale * reward
         if self.noise_std > 0:

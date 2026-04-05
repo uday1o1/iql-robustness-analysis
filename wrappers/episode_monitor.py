@@ -18,8 +18,14 @@ class EpisodeMonitor(gym.ActionWrapper):
         self.episode_length = 0
         self.start_time = time.time()
 
-    def step(self, action: np.ndarray) -> TimeStep:
-        observation, reward, done, info = self.env.step(action)
+    def step(self, action: np.ndarray):
+        step_result = self.env.step(action)
+        # Handle both gymnasium (5 values) and gym (4 values) APIs
+        if len(step_result) == 5:
+            observation, reward, terminated, truncated, info = step_result
+            done = terminated or truncated
+        else:
+            observation, reward, done, info = step_result
 
         self.reward_sum += reward
         self.episode_length += 1
@@ -38,6 +44,10 @@ class EpisodeMonitor(gym.ActionWrapper):
 
         return observation, reward, done, info
 
-    def reset(self) -> np.ndarray:
+    def reset(self, **kwargs):
         self._reset_stats()
-        return self.env.reset()
+        result = self.env.reset(**kwargs)
+        # gymnasium reset() returns (obs, info), gym returns just obs
+        if isinstance(result, tuple):
+            return result[0]
+        return result
