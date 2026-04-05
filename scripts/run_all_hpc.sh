@@ -125,6 +125,11 @@ setup_environment() {
     # JAX 0.4.35 is the last release before the 0.5.x series.
     pip install --only-binary=:all: \
         numpy scipy h5py matplotlib \
+        "jax[cuda12]==0.4.35" "jaxlib==0.4.35" \
+        flax optax ml_dtypes \
+        mujoco gymnasium 2>/dev/null || \
+    pip install --only-binary=:all: \
+        numpy scipy h5py matplotlib \
         "jax==0.4.35" "jaxlib==0.4.35" \
         flax optax ml_dtypes \
         mujoco gymnasium
@@ -137,16 +142,18 @@ setup_environment() {
         pip install tensorflow-probability 2>/dev/null || \
         echo "WARNING: tensorflow-probability not installed"
 
-    # gym (legacy, may need source build — skip if it fails)
-    pip install --only-binary=:all: gym 2>/dev/null || \
+    # gym (legacy API, needed by D4RL)
+    pip install "gym==0.23.1" 2>/dev/null || \
         pip install gym 2>/dev/null || \
-        echo "WARNING: gym not installed (gymnasium is the primary dep)"
+        echo "WARNING: gym not installed"
 
-    # D4RL (builds from git — may need compilation, skip if fails)
+    # D4RL — install without its heavy deps (mujoco-py, etc.)
+    # We already have mujoco and gymnasium installed above.
     echo ""
     echo "Installing D4RL..."
-    pip install git+https://github.com/Farama-Foundation/d4rl@master 2>/dev/null || \
-        echo "WARNING: D4RL install had issues (may still work)"
+    pip install --no-deps git+https://github.com/Farama-Foundation/d4rl@master 2>/dev/null || \
+        pip install --no-deps d4rl 2>/dev/null || \
+        echo "WARNING: D4RL install failed — see troubleshooting below"
 
     # Verify
     echo ""
