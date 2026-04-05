@@ -35,11 +35,12 @@ class RewardPerturbation(gym.Wrapper):
         step_result = self.env.step(action)
         if len(step_result) == 5:
             observation, reward, terminated, truncated, info = step_result
-            done = terminated or truncated
         else:
             observation, reward, done, info = step_result
+            terminated = done
+            truncated = False
         # Apply perturbation
         perturbed_reward = self.scale * reward
         if self.noise_std > 0:
             perturbed_reward += np.random.normal(0, self.noise_std)
-        return observation, perturbed_reward, done, info
+        return observation, perturbed_reward, terminated, truncated, info

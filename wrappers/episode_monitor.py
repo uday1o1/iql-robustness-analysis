@@ -26,6 +26,8 @@ class EpisodeMonitor(gym.ActionWrapper):
             done = terminated or truncated
         else:
             observation, reward, done, info = step_result
+            terminated = done
+            truncated = False
 
         self.reward_sum += reward
         self.episode_length += 1
@@ -42,7 +44,8 @@ class EpisodeMonitor(gym.ActionWrapper):
                 info['episode']['return'] = self.get_normalized_score(
                     info['episode']['return']) * 100.0
 
-        return observation, reward, done, info
+        # Return 5 values for gymnasium compatibility
+        return observation, reward, terminated, truncated, info
 
     def reset(self, **kwargs):
         self._reset_stats()
