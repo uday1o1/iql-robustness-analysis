@@ -119,18 +119,23 @@ setup_environment() {
     # Install everything using ONLY pre-built binary wheels.
     # numpy 2.x, scipy, h5py, jax, etc. all publish manylinux2014
     # (GLIBC 2.17) wheels for Python 3.11 on x86_64.
+    #
+    # Version pinning: tensorflow-probability requires JAX < 0.5.0
+    # (jax.interpreters.xla was removed in JAX 0.7.0).
+    # JAX 0.4.35 is the last release before the 0.5.x series.
     pip install --only-binary=:all: \
         numpy scipy h5py matplotlib \
-        jax jaxlib flax optax ml_dtypes \
+        "jax==0.4.35" "jaxlib==0.4.35" \
+        flax optax ml_dtypes \
         mujoco gymnasium
 
     # Pure Python packages (no binary needed)
     pip install tqdm absl-py ml_collections tensorboardX
 
-    # These may or may not have manylinux2014 wheels — try binary first
+    # tensorflow-probability (JAX substrate for policy distributions)
     pip install --only-binary=:all: tensorflow-probability 2>/dev/null || \
         pip install tensorflow-probability 2>/dev/null || \
-        echo "WARNING: tensorflow-probability not installed (optional)"
+        echo "WARNING: tensorflow-probability not installed"
 
     # gym (legacy, may need source build — skip if it fails)
     pip install --only-binary=:all: gym 2>/dev/null || \
