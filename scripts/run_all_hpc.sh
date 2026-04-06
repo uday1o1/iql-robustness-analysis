@@ -85,6 +85,25 @@ activate_env() {
     export PYTHONPATH="${PROJECT_DIR}:${PYTHONPATH:-}"
     # Suppress D4RL warnings for envs we don't use (mujoco_py, flow, etc.)
     export D4RL_SUPPRESS_IMPORT_ERROR=1
+
+    # GPU check — report JAX backend immediately
+    echo ""
+    echo "--- JAX Backend Check ---"
+    python -c "
+import jax
+devices = jax.devices()
+gpu_devs = [d for d in devices if d.platform == 'gpu']
+if gpu_devs:
+    print(f'  GPU ENABLED: {len(gpu_devs)} GPU(s) detected')
+    for d in gpu_devs:
+        print(f'    {d}')
+else:
+    print('  CPU ONLY: No GPU detected by JAX')
+    print('  (Re-run setup with CUDA to enable GPU acceleration)')
+print(f'  JAX version: {jax.__version__}')
+" 2>/dev/null || echo "  WARNING: JAX import failed"
+    echo "-------------------------"
+    echo ""
 }
 
 # ─────────────────────────────────────────────────────────────────────
