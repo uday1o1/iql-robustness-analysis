@@ -1,5 +1,6 @@
 """Implementations of algorithms for continuous control."""
 
+import os
 from typing import Optional, Sequence, Tuple
 
 import jax
@@ -7,15 +8,15 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-import policy
-import value_net
-from actor import update as awr_update_actor
-from common import Batch, InfoDict, Model, PRNGKey
-from critic import update_q, update_v
+from iql import policy
+from iql import value_net
+from iql.actor import update as awr_update_actor
+from iql.common import Batch, InfoDict, Model, PRNGKey
+from iql.critic import update_q, update_v
 
 
 def target_update(critic: Model, target_critic: Model, tau: float) -> Model:
-    new_target_params = jax.tree_multimap(
+    new_target_params = jax.tree_map(
         lambda p, tp: p * tau + tp * (1 - tau), critic.params,
         target_critic.params)
 
@@ -60,9 +61,13 @@ class Learner(object):
                  temperature: float = 0.1,
                  dropout_rate: Optional[float] = None,
                  max_steps: Optional[int] = None,
-                 opt_decay_schedule: str = "cosine"):
-        """
-        An implementation of the version of Soft-Actor-Critic described in https://arxiv.org/abs/1801.01290
+                 opt_decay_schedule: str = "cosine",
+                 num_critics: int = 2):
+        """IQL Learner with configurable number of Q-networks.
+
+        Args:
+            num_critics: Number of Q-networks. 2 = DoubleCritic (default),
+                         3 = TripleCritic (Q-ensemble extension).
         """
 
         self.expectile = expectile
@@ -93,7 +98,11 @@ class Learner(object):
                              inputs=[actor_key, observations],
                              tx=optimiser)
 
-        critic_def = value_net.DoubleCritic(hidden_dims)
+        if num_critics == 3:
+            critic_def = value_net.TripleCritic(hidden_dims)
+        else:
+            critic_def = value_net.DoubleCritic(hidden_dims)
+
         critic = Model.create(critic_def,
                               inputs=[critic_key, observations, actions],
                               tx=optax.adam(learning_rate=critic_lr))
@@ -135,3 +144,12 @@ class Learner(object):
         self.target_critic = new_target_critic
 
         return info
+
+    def save(self, save_dir: str, step: int):
+        """Save all model checkpoints."""
+        ckpt_dir = os.path.join(save_dir, f'checkpoint_{step}')
+        os.makedirs(ckpt_dir, exist_ok=True)
+        self.actor.save(os.path.join(ckpt_dir, 'actor.pkl'))
+        self.critic.save(os.path.join(ckpt_dir, 'critic.pkl'))
+        self.value.save(os.path.join(ckpt_dir, 'value.pkl'))
+        self.target_critic.save(os.path.join(ckpt_dir, 'target_critic.pkl'))

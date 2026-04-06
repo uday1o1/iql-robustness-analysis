@@ -59,7 +59,10 @@ class Model:
                tx: Optional[optax.GradientTransformation] = None) -> 'Model':
         variables = model_def.init(*inputs)
 
-        _, params = variables.pop('params')
+        params = variables.get('params', variables)
+        if isinstance(params, tuple):
+            # Older Flax returns (remaining, value) from pop
+            params = params[1]
 
         if tx is not None:
             opt_state = tx.init(params)
