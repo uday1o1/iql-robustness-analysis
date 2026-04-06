@@ -153,7 +153,7 @@ setup_environment() {
     echo "  Downloading binary wheels..."
     pip download --only-binary=:all: --dest "$WHEEL_DIR" \
         numpy==1.26.4 scipy==1.13.1 h5py==3.11.0 \
-        "jax==${JAX_VER}" ml_dtypes==0.4.1 \
+        "jax==${JAX_VER}" "jaxlib==${JAX_VER}" ml_dtypes==0.4.1 \
         mujoco==3.1.6 matplotlib==3.9.2 \
         flax==0.8.5 optax==0.2.3 \
         tensorflow-probability==0.23.0
@@ -162,7 +162,7 @@ setup_environment() {
     echo "  Installing from downloaded wheels..."
     pip install --no-index --find-links="$WHEEL_DIR" \
         numpy==1.26.4 scipy==1.13.1 h5py==3.11.0 \
-        "jax==${JAX_VER}" ml_dtypes==0.4.1 \
+        "jax==${JAX_VER}" "jaxlib==${JAX_VER}" ml_dtypes==0.4.1 \
         mujoco==3.1.6 matplotlib==3.9.2 \
         flax==0.8.5 optax==0.2.3 \
         tensorflow-probability==0.23.0
@@ -170,52 +170,55 @@ setup_environment() {
     # Install jaxlib with CUDA support for GPU acceleration.
     # jaxlib 0.4.29 is the last version with manylinux2014 CUDA wheels
     # (GLIBC 2.17 compatible). The wheel is ~600MB and includes CUDA+cuDNN.
+    #
+    # For 0.4.29, the CUDA 12 variant is: jaxlib==0.4.29+cuda12.cudnn91
     echo ""
     echo "  Installing jaxlib ${JAX_VER} with CUDA 12 support..."
     echo "  (manylinux2014 wheel — compatible with GLIBC 2.17)"
     echo ""
 
     JAXLIB_INSTALLED=0
+    CUDA_WHEEL_NAME="jaxlib-${JAX_VER}+cuda12.cudnn91-cp311-cp311-manylinux2014_x86_64.whl"
+    CUDA_WHEEL="${WHEEL_DIR}/${CUDA_WHEEL_NAME}"
+    CUDA_WHEEL_URL="https://storage.googleapis.com/jax-releases/cuda12/${CUDA_WHEEL_NAME}"
 
     # Temporarily disable exit-on-error for CUDA install attempts
     set +e
 
-    # Try CUDA 12 with manylinux2014 (GLIBC 2.17 compatible)
-    if [ "$JAXLIB_INSTALLED" -eq 0 ]; then
-        echo "  Downloading CUDA 12 wheel (this may take a few minutes)..."
-        pip install "jaxlib==${JAX_VER}+cuda12.cudnn89" \
-            -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html \
-            2>&1
-        if python -c "import jaxlib; v=jaxlib.__version__; print(f'  jaxlib: {v}'); assert 'cuda' in v.lower()" 2>/dev/null; then
-            echo "  SUCCESS: CUDA 12 jaxlib installed (manylinux2014)"
-            JAXLIB_INSTALLED=1
-        else
-            echo "  CUDA 12 install did not produce a CUDA jaxlib."
-        fi
+    # Method 1: pip install with -f flag (works if network doesn't mangle URLs)
+    echo "  Attempting pip install jaxlib==${JAX_VER}+cuda12.cudnn91 ..."
+    pip install "jaxlib==${JAX_VER}+cuda12.cudnn91" \
+        -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html \
+        2>&1
+    if python -c "import jaxlib; v=jaxlib.__version__; print(f'  jaxlib: {v}'); assert 'cuda' in v.lower()" 2>/dev/null; then
+        echo "  SUCCESS: CUDA 12 jaxlib installed via pip"
+        JAXLIB_INSTALLED=1
     fi
 
-    # Try CUDA 11 fallback
+    # Method 2: Direct download with curl (fallback)
     if [ "$JAXLIB_INSTALLED" -eq 0 ]; then
         echo ""
-        echo "  Trying CUDA 11..."
-        pip install "jaxlib==${JAX_VER}+cuda11.cudnn86" \
-            -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html \
-            2>&1
-        if python -c "import jaxlib; v=jaxlib.__version__; print(f'  jaxlib: {v}'); assert 'cuda' in v.lower()" 2>/dev/null; then
-            echo "  SUCCESS: CUDA 11 jaxlib installed (manylinux2014)"
-            JAXLIB_INSTALLED=1
-        else
-            echo "  CUDA 11 install did not produce a CUDA jaxlib."
+        echo "  pip install failed. Trying direct download with curl..."
+        if [ ! -f "$CUDA_WHEEL" ]; then
+            curl -L -o "$CUDA_WHEEL" "$CUDA_WHEEL_URL" 2>&1
+        fi
+        if [ -f "$CUDA_WHEEL" ]; then
+            SIZE=$(du -h "$CUDA_WHEEL" | cut -f1)
+            echo "  Downloaded: ${SIZE}"
+            pip install --force-reinstall "$CUDA_WHEEL" 2>&1
+            if python -c "import jaxlib; v=jaxlib.__version__; print(f'  jaxlib: {v}'); assert 'cuda' in v.lower()" 2>/dev/null; then
+                echo "  SUCCESS: CUDA 12 jaxlib installed via curl"
+                JAXLIB_INSTALLED=1
+            fi
         fi
     fi
 
-    # Fallback: CPU-only
+    # Fallback: CPU-only (use the jaxlib already downloaded in .wheels)
     if [ "$JAXLIB_INSTALLED" -eq 0 ]; then
         echo ""
         echo "  WARNING: CUDA jaxlib install failed. Using CPU-only."
-        pip download --only-binary=:all: --dest "$WHEEL_DIR" "jaxlib==${JAX_VER}" 2>/dev/null || true
-        pip install --no-index --find-links="$WHEEL_DIR" "jaxlib==${JAX_VER}" || \
-            pip install "jaxlib==${JAX_VER}"
+        pip install --no-index --find-links="$WHEEL_DIR" "jaxlib==${JAX_VER}" 2>/dev/null || \
+            pip install "jaxlib==${JAX_VER}" 2>/dev/null || true
         echo "  Training will work but be ~15x slower without GPU."
     fi
 
