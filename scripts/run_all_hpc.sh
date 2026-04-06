@@ -170,6 +170,23 @@ setup_environment() {
     # Set D4RL env var to suppress import warnings for envs we don't use
     export D4RL_SUPPRESS_IMPORT_ERROR=1
 
+    # Pre-download D4RL datasets (GPU nodes have no internet)
+    echo ""
+    echo "Pre-downloading D4RL datasets (GPU nodes have no internet)..."
+    python -c "
+import os, sys
+sys.path.insert(0, '${PROJECT_DIR}')
+os.environ['D4RL_SUPPRESS_IMPORT_ERROR'] = '1'
+from iql.dataset_utils import _load_d4rl_dataset
+for env in ['hopper-medium-v2', 'halfcheetah-medium-v2', 'walker2d-medium-v2']:
+    print(f'  Downloading {env}...')
+    try:
+        _load_d4rl_dataset(env)
+        print(f'    OK')
+    except Exception as e:
+        print(f'    Failed: {e}')
+"
+
     # Run full verification
     echo ""
     echo "Running verification..."
