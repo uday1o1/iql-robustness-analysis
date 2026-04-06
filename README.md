@@ -30,7 +30,7 @@ The core research question: *How robust is Implicit Q-Learning under controlled 
 
 ---
 
-## What We Have Demonstrated So Far
+## What We Have Demonstrated
 
 ### Literature & Theory
 - Surveyed three offline RL approaches: IQL (expectile regression), CQL (pessimistic Q-values), TD3+BC (behavior cloning regularization)
@@ -38,44 +38,41 @@ The core research question: *How robust is Implicit Q-Learning under controlled 
 - Identified the gap: none of these methods have been evaluated under environment-level perturbations at test time
 
 ### Baseline Reproduction
-- Reproduced IQL on `hopper-medium-v2` with a final normalized score of **52.79** (300k training steps)
+- Trained IQL (2Q) on all 3 D4RL medium datasets: hopper (1712), halfcheetah (5510), walker2d (3550)
 - Implementation uses JAX/Flax with 2-layer MLPs (256 hidden units), expectile τ=0.7, temperature β=3.0
 
 ### Q-Ensemble Extension
 - Implemented `TripleCritic` — 3 Q-networks taking `min(q1, q2, q3)` for more conservative value estimation
-- Trained on `hopper-medium-v2` with a final score of **50.88** (300k steps)
-- The 1.91-point gap confirms the implementation is correct — the benefit of the ensemble is expected to show under distribution shift, not in baseline performance
+- Trained on all 3 environments: hopper (1426), halfcheetah (5536), walker2d (3549)
+- 3Q improves robustness on Hopper (lower AUDC across all 4 shifts) but the effect is environment-dependent
 
-### Distribution Shift Wrappers
-- **Gravity shift** — scales MuJoCo gravity vector (levels: 0.5x, 1.0x, 1.5x, 2.0x)
-- **Observation noise** — adds Gaussian noise to observations (σ = 0.0, 0.01, 0.1, 0.3)
-- **Friction shift** — scales MuJoCo friction coefficients (levels: 0.5x, 1.0x, 1.5x, 2.0x)
-- **Reward perturbation** — adds noise to rewards (σ = 0.0, 0.1, 0.5, 1.0)
+### Distribution Shift Evaluation
+- Evaluated 5 configurations (2Q, 3Q, 2Q-τ0.5, 2Q-τ0.8, 2Q-τ0.9) across 3 datasets and 4 shift types
+- **Total: 240 shift-level evaluations** (3 envs × 5 configs × 4 shifts × 4 levels), each averaged over 10 episodes
+- Gravity and friction are the most damaging shifts (AUDC > 0.5); reward perturbation has negligible impact
+
+### Expectile τ Ablation
+- Ablated τ ∈ {0.5, 0.7, 0.8, 0.9} on all 3 environments with 2Q
+- Clear trend: lower τ → lower baseline but better robustness (more pessimistic value estimates)
 
 ### Evaluation Pipeline
 - `scripts/evaluate_shift.py` — evaluates a trained agent under any combination of shift types, outputs CSV
-- `scripts/compute_robustness.py` — reads CSVs and computes Δ(δ), AUDC, worst-case performance, and side-by-side comparison tables
-- `scripts/run_all_hpc.sh` — single script that submits all training, evaluation, and ablation jobs to SLURM
+- `scripts/compute_robustness.py` — reads CSVs and computes Δ(δ), AUDC, worst-case performance, writes summary CSVs
+- `scripts/run_all_hpc.sh` — single script that runs all training, evaluation, ablation, and analysis on SLURM
 
 ---
 
-## What Remains
+## Experiment Status
 
 | Task | Status | Notes |
 |---|---|---|
-| Baseline training on halfcheetah-medium-v2 | Code ready, not yet run | Same script, different `--env_name` |
-| Baseline training on walker2d-medium-v2 | Code ready, not yet run | Same script, different `--env_name` |
-| Q-ensemble training on halfcheetah + walker2d | Code ready, not yet run | `--num_critics=3` |
-| Shift evaluation across all envs and shift types | Code ready, not yet run | `--shift_type=all` |
-| Robustness metrics computation | Code ready, not yet run | Depends on shift eval CSVs |
-| Expectile τ ablation (τ = 0.5, 0.8, 0.9) | Code ready, not yet run | `--config.expectile=0.5` |
-| Multiple seeds for error bars | Code ready, not yet run | Change `--seed` |
-| Final results table and plots | Notebook ready | `notebooks/04_analyze_results.ipynb` |
-
-All of these are triggered by a single command on HPC:
-```bash
-./scripts/run_all_hpc.sh
-```
+| Baseline training (2Q) on all 3 envs | ✅ Complete | 300k steps, seed=42 |
+| Q-ensemble training (3Q) on all 3 envs | ✅ Complete | 300k steps, seed=42 |
+| Shift evaluation (2Q + 3Q × 4 shifts × 4 levels) | ✅ Complete | 6 CSVs in `results/` |
+| Expectile τ ablation (τ = 0.5, 0.8, 0.9) | ✅ Complete | 9 CSVs in `results/` |
+| Robustness metrics (AUDC, worst-case) | ✅ Complete | 3 summary CSVs |
+| Multiple seeds for error bars | Not yet run | Change `SEEDS` in `run_all_hpc.sh` |
+| Final results table and plots | Pending | `notebooks/04_analyze_results.ipynb` |
 
 ---
 
@@ -118,17 +115,64 @@ We extend IQL's `DoubleCritic` (2 Q-networks, `min(q1,q2)`) to a `TripleCritic` 
 
 ## Results
 
+All experiments run on SJSU CoE HPC (GPU partition), 300k training steps, seed=42.
+
 ### Baseline Performance (No Shift)
 
-| Environment | Baseline IQL (2Q) | Q-Ensemble IQL (3Q) |
+| Environment | 2Q Return | 3Q Return |
 |---|---|---|
-| hopper-medium-v2 | **52.79** | 50.88 |
-| halfcheetah-medium-v2 | — | — |
-| walker2d-medium-v2 | — | — |
+| hopper-medium-v2 | **1712** | 1426 |
+| halfcheetah-medium-v2 | 5510 | **5536** |
+| walker2d-medium-v2 | **3550** | 3549 |
 
-### Shift Evaluation
+### 2Q vs 3Q Robustness (AUDC — lower is better)
 
-Pending — run `./scripts/run_all_hpc.sh` on HPC to generate.
+**Hopper** — 3Q more robust across all shifts:
+
+| Shift Type | 2Q AUDC | 3Q AUDC | Winner |
+|---|---|---|---|
+| Gravity | 0.596 | **0.574** | 3Q |
+| Obs Noise | 0.146 | **0.142** | 3Q |
+| Friction | 0.738 | **0.687** | 3Q |
+| Reward Perturb | 0.002 | **0.001** | 3Q |
+
+**HalfCheetah** — Mixed results:
+
+| Shift Type | 2Q AUDC | 3Q AUDC | Winner |
+|---|---|---|---|
+| Gravity | **0.245** | 0.255 | 2Q |
+| Obs Noise | 0.144 | **0.134** | 3Q |
+| Friction | 0.016 | **0.011** | 3Q |
+| Reward Perturb | **0.000** | 0.001 | 2Q |
+
+**Walker2d** — 2Q more robust on most shifts:
+
+| Shift Type | 2Q AUDC | 3Q AUDC | Winner |
+|---|---|---|---|
+| Gravity | **0.693** | 0.790 | 2Q |
+| Obs Noise | **0.118** | 0.128 | 2Q |
+| Friction | 0.161 | **0.154** | 3Q |
+| Reward Perturb | **0.001** | 0.002 | 2Q |
+
+### Expectile τ Ablation (2Q only)
+
+Higher τ → higher baseline but less robust. Lower τ (more pessimistic) trades performance for robustness.
+
+**Hopper — Gravity AUDC by τ:**
+
+| τ | Baseline | Gravity AUDC | Obs Noise AUDC | Friction AUDC |
+|---|---|---|---|---|
+| 0.5 | 1420 | **0.566** | **0.136** | **0.691** |
+| 0.7 | 1712 | 0.596 | 0.146 | 0.738 |
+| 0.8 | 1830 | 0.695 | 0.141 | 0.749 |
+| 0.9 | 1934 | 0.773 | 0.180 | 0.773 |
+
+### Key Findings
+
+1. **Q-ensemble (3Q) improves robustness on Hopper** but the effect is environment-dependent — Walker2d shows the opposite trend
+2. **Reward perturbation has negligible impact** (AUDC < 0.003 everywhere) — offline policies are insensitive to reward noise at test time since they don't update
+3. **Gravity and friction are the most damaging shifts** — AUDC > 0.5 on Hopper and Walker2d
+4. **Lower expectile τ improves robustness** at the cost of baseline performance — consistent with IQL theory (more pessimistic value estimates)
 
 ---
 
@@ -175,9 +219,12 @@ iql-robustness-analysis/
 │   └── 04_analyze_results.ipynb  #   Generate plots and tables
 │
 ├── results/                      # Experiment outputs
-│   ├── results_baseline_iql.csv
-│   ├── results_ensemble_iql.csv
-│   └── results_comparison.png
+│   ├── shift_{env}_{2Q|3Q}_seed42.csv        # Phase 2: shift eval (6 files)
+│   ├── shift_{env}_2Q_seed42_tau{τ}.csv      # Phase 3: ablation (9 files)
+│   ├── summary_{env}.csv                     # Phase 4: AUDC summary (3 files)
+│   ├── results_baseline_iql.csv              # Training curve (2Q hopper)
+│   ├── results_ensemble_iql.csv              # Training curve (3Q hopper)
+│   └── results_comparison.png                # Comparison plot
 │
 ├── requirements.txt
 ├── LICENSE
