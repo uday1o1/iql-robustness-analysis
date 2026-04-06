@@ -98,6 +98,38 @@ def main(_):
                 print(f"{label}={audc:.4f}  ", end="")
             print()
 
+    # ── Write summary CSV ──
+    summary_file = os.path.join(FLAGS.results_dir,
+                                f'summary_{FLAGS.env_name}.csv')
+    summary_rows = []
+    for label, results in sorted(all_configs.items()):
+        shift_types = sorted(set(r['shift_type'] for r in results))
+        for st in shift_types:
+            audc = compute_audc(results, st)
+            filtered = [r for r in results if r['shift_type'] == st]
+            worst = min(r['raw_return'] for r in filtered)
+            baseline_levels = {'gravity': 1.0, 'obs_noise': 0.0,
+                               'friction': 1.0, 'reward_perturb': 0.0}
+            bl = baseline_levels.get(st, 0)
+            baseline_return = next(
+                (r['raw_return'] for r in filtered if r['shift_level'] == bl), 0)
+            summary_rows.append({
+                'env': FLAGS.env_name,
+                'config': label,
+                'shift_type': st,
+                'baseline_return': f'{baseline_return:.2f}',
+                'worst_return': f'{worst:.2f}',
+                'audc': f'{audc:.4f}',
+            })
+
+    with open(summary_file, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            'env', 'config', 'shift_type',
+            'baseline_return', 'worst_return', 'audc'])
+        writer.writeheader()
+        writer.writerows(summary_rows)
+    print(f"\nSummary written to {summary_file}")
+
 
 if __name__ == '__main__':
     app.run(main)
