@@ -66,8 +66,8 @@ The core research question: *How robust is Implicit Q-Learning under controlled 
 | Baseline training on halfcheetah-medium-v2 | Code ready, not yet run | Same script, different `--env_name` |
 | Baseline training on walker2d-medium-v2 | Code ready, not yet run | Same script, different `--env_name` |
 | Q-ensemble training on halfcheetah + walker2d | Code ready, not yet run | `--num_critics=3` |
-| Shift evaluation across all envs and shift types | Code ready, not yet run | `--shift_type=all` |
-| Robustness metrics computation | Code ready, not yet run | Depends on shift eval CSVs |
+| Shift evaluation on hopper-medium-v2 (gravity + noise) | Done | results/results_gravity_shift.csv, results/results_noise_shift.csv |
+| Shift evaluation across halfcheetah + walker2d | Code ready, not yet run | `--shift_type=all` || Robustness metrics computation | Code ready, not yet run | Depends on shift eval CSVs |
 | Expectile τ ablation (τ = 0.5, 0.8, 0.9) | Code ready, not yet run | `--config.expectile=0.5` |
 | Multiple seeds for error bars | Code ready, not yet run | Change `--seed` |
 | Final results table and plots | Notebook ready | `notebooks/04_analyze_results.ipynb` |
@@ -122,11 +122,45 @@ We extend IQL's `DoubleCritic` (2 Q-networks, `min(q1,q2)`) to a `TripleCritic` 
 
 | Environment | Baseline IQL (2Q) | Q-Ensemble IQL (3Q) |
 |---|---|---|
-| hopper-medium-v2 | **52.79** | 50.88 |
+| hopper-medium-v2 | **59.09** | 46.01 |
 | halfcheetah-medium-v2 | — | — |
 | walker2d-medium-v2 | — | — |
 
-### Shift Evaluation
+### Shift Evaluation — hopper-medium-v2
+
+**Gravity Shift**
+
+| Gravity Scale | Baseline IQL | Q-Ensemble IQL | Baseline Drop | Ensemble Drop |
+|---|---|---|---|---|
+| 0.5x | 9.45 | 12.18 | 44.81 | 32.58 |
+| 1.0x | 57.66 | 43.84 | 0.00 | 0.00 |
+| 1.5x | 22.85 | 24.23 | 40.06 | 21.80 |
+| 2.0x | 10.92 | 11.81 | 50.77 | 33.37 |
+
+**Observation Noise**
+
+| Noise Std | Baseline IQL | Q-Ensemble IQL | Baseline Drop | Ensemble Drop |
+|---|---|---|---|---|
+| 0.00 | 59.20 | 48.26 | 0.00 | 0.00 |
+| 0.01 | 64.47 | 48.43 | -5.27 | -0.17 |
+| 0.10 | 35.30 | 31.72 | 23.90 | 16.54 |
+| 0.30 | 10.64 | 9.02 | 48.56 | 39.24 |
+
+**Key Finding:** Q-Ensemble degrades less under both shift types despite starting
+lower at baseline. Under gravity shift the ensemble drop is on average 15 points
+smaller. Under observation noise the ensemble drop is on average 10 points smaller
+at high noise levels. This supports the hypothesis that conservative value estimation
+improves robustness under distribution shift.
+
+### Shift Evaluation — halfcheetah-medium-v2 and walker2d-medium-v2
+
+Pending — run `./scripts/run_all_hpc.sh` on HPC to generate.
+
+### Robustness Metrics (AUDC, Worst-Case)
+
+Pending — run `./scripts/compute_robustness.py` after shift evaluation completes.
+
+### Ablation Study (Expectile τ)
 
 Pending — run `./scripts/run_all_hpc.sh` on HPC to generate.
 
@@ -169,15 +203,19 @@ iql-robustness-analysis/
 │   └── run_all_hpc.sh            #   Submit all experiments to SLURM
 │
 ├── notebooks/                    # Jupyter notebooks
-│   ├── 01_train_baseline.ipynb   #   Train 2Q on all envs
-│   ├── 02_train_ensemble.ipynb   #   Train 3Q on all envs
-│   ├── 03_evaluate_shift.ipynb   #   Evaluate under shift
-│   └── 04_analyze_results.ipynb  #   Generate plots and tables
+│   ├── 01_train_baseline.ipynb       #   Train 2Q on all envs
+│   ├── 02_train_ensemble.ipynb       #   Train 3Q on all envs
+│   ├── 03_evaluate_shift.ipynb       #   Evaluate under shift
+│   ├── 04_analyze_results.ipynb      #   Generate plots and tables
+│   └── uday_q_ensemble_iql.ipynb     #   Q-ensemble implementation + robustness experiments (Uday)
 │
 ├── results/                      # Experiment outputs
-│   ├── results_baseline_iql.csv
-│   ├── results_ensemble_iql.csv
-│   └── results_comparison.png
+│   ├── results_baseline_iql.csv          #   Baseline IQL training scores (hopper)
+│   ├── results_ensemble_iql.csv          #   Q-ensemble training scores (hopper)
+│   ├── results_comparison.png            #   Baseline vs ensemble learning curves
+│   ├── results_gravity_shift.csv         #   Robustness under gravity shift (hopper)
+│   ├── results_noise_shift.csv           #   Robustness under observation noise (hopper)
+│   └── results_shift_comparison.png      #   Gravity and noise shift plots
 │
 ├── requirements.txt
 ├── LICENSE
@@ -262,7 +300,11 @@ source scripts/hpc_aliases.sh    # load once per session
 
 ### On Google Colab
 
-Run the notebooks in order: `01_train_baseline.ipynb` → `02_train_ensemble.ipynb` → `03_evaluate_shift.ipynb` → `04_analyze_results.ipynb`
+For the full team pipeline, run the notebooks in order:
+`01_train_baseline.ipynb` → `02_train_ensemble.ipynb` → `03_evaluate_shift.ipynb` → `04_analyze_results.ipynb`
+
+For the Q-ensemble extension and robustness experiments specifically, see:
+`notebooks/uday_q_ensemble_iql.ipynb` — self-contained notebook that trains both baseline IQL and Q-ensemble, then evaluates both under gravity and observation noise shift. No local setup required, runs fully on Google Colab with A100 GPU.
 
 ### Locally
 
