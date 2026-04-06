@@ -63,8 +63,13 @@ def normalize(dataset):
         return episode_return
 
     trajs.sort(key=compute_returns)
-    dataset.rewards /= compute_returns(trajs[-1]) - compute_returns(trajs[0])
-    dataset.rewards *= 1000.0
+    ret_range = compute_returns(trajs[-1]) - compute_returns(trajs[0])
+    if abs(ret_range) < 1e-8:
+        # All trajectories have the same return — skip normalization
+        print(f"WARNING: reward range is ~0 ({ret_range:.6f}), skipping normalization")
+    else:
+        dataset.rewards /= ret_range
+        dataset.rewards *= 1000.0
 
 
 def make_env_and_dataset(env_name: str,
@@ -149,7 +154,11 @@ def main(_):
                 if v.ndim == 0:
                     summary_writer.add_scalar(f'training/{k}', v, i)
                 else:
-                    summary_writer.add_histogram(f'training/{k}', v, i)
+                    # Skip histogram if values contain NaN/Inf
+                    import numpy as _np
+                    v_np = _np.asarray(v)
+                    if _np.isfinite(v_np).any() and v_np.size > 0:
+                        summary_writer.add_histogram(f'training/{k}', v_np[_np.isfinite(v_np)], i)
             summary_writer.flush()
 
         if i % FLAGS.eval_interval == 0:
