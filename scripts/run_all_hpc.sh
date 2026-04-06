@@ -173,43 +173,55 @@ setup_environment() {
 
     JAXLIB_INSTALLED=0
 
+    # Temporarily disable exit-on-error for CUDA install attempts
+    # (pip install will fail if CUDA wheels are incompatible with GLIBC 2.17)
+    set +e
+
     # Try CUDA 12 (most common on modern HPC)
     if [ "$JAXLIB_INSTALLED" -eq 0 ]; then
         echo "  Attempting: jaxlib==0.4.35+cuda12 ..."
         pip install "jax[cuda12_pip]==0.4.35" \
             -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html \
-            2>&1 | tail -3
-        if python -c "import jaxlib; print(jaxlib.__version__)" 2>/dev/null | grep -q "cuda"; then
+            2>&1
+        if python -c "import jaxlib; v=jaxlib.__version__; print(v); assert 'cuda' in v.lower() or 'cu12' in v.lower()" 2>/dev/null; then
             echo "  SUCCESS: CUDA 12 jaxlib installed"
             JAXLIB_INSTALLED=1
+        else
+            echo "  CUDA 12 attempt did not produce a CUDA jaxlib."
         fi
     fi
 
     # Try CUDA 11
     if [ "$JAXLIB_INSTALLED" -eq 0 ]; then
+        echo ""
         echo "  Attempting: jaxlib==0.4.35+cuda11 ..."
         pip install "jax[cuda11_pip]==0.4.35" \
             -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html \
-            2>&1 | tail -3
-        if python -c "import jaxlib; print(jaxlib.__version__)" 2>/dev/null | grep -q "cuda"; then
+            2>&1
+        if python -c "import jaxlib; v=jaxlib.__version__; print(v); assert 'cuda' in v.lower() or 'cu11' in v.lower()" 2>/dev/null; then
             echo "  SUCCESS: CUDA 11 jaxlib installed"
             JAXLIB_INSTALLED=1
+        else
+            echo "  CUDA 11 attempt did not produce a CUDA jaxlib."
         fi
     fi
 
-    # Fallback: CPU-only
+    # Fallback: CPU-only (jaxlib was already installed from .wheels earlier)
     if [ "$JAXLIB_INSTALLED" -eq 0 ]; then
-        echo "  CUDA jaxlib install failed. Installing CPU-only jaxlib..."
-        pip download --only-binary=:all: --dest "$WHEEL_DIR" jaxlib==0.4.35 2>/dev/null || true
-        pip install --no-index --find-links="$WHEEL_DIR" jaxlib==0.4.35 || \
-            pip install jaxlib==0.4.35
-        echo "  WARNING: Using CPU-only jaxlib. Training will be slower."
+        echo ""
+        echo "  WARNING: CUDA jaxlib install failed."
+        echo "  Using CPU-only jaxlib (already installed). Training will be slower."
+        echo "  The SJSU HPC may have GLIBC 2.17 which is too old for CUDA JAX wheels."
     fi
+
+    # Re-enable exit-on-error
+    set -e
 
     # Report what was installed
     echo ""
     echo "  Installed jaxlib version:"
     pip show jaxlib 2>/dev/null | grep -i version
+    echo ""
 
     # Pure Python packages — install normally from PyPI
     echo ""
