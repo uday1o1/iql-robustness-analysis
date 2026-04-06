@@ -101,39 +101,9 @@ class Dataset(object):
                      next_observations=self.next_observations[indx])
 
 
-def _load_d4rl_dataset(env_or_name):
-    """Load a D4RL dataset, handling both gym.Env and string env names."""
-    if _HAS_D4RL:
-        try:
-            # Try the standard D4RL API first
-            if hasattr(env_or_name, 'get_dataset'):
-                return d4rl.qlearning_dataset(env_or_name)
-            else:
-                # Create a minimal env just for dataset loading
-                env = gym.make(env_or_name)
-                ds = d4rl.qlearning_dataset(env)
-                env.close()
-                return ds
-        except Exception:
-            pass
-
-    # Fallback: download the HDF5 file directly from D4RL URLs
+def _load_from_hdf5(cache_path):
+    """Load a D4RL dataset from a local HDF5 file."""
     import h5py
-    import urllib.request
-    import tempfile
-
-    # D4RL dataset URLs follow this pattern
-    name = env_or_name if isinstance(env_or_name, str) else env_or_name.spec.id
-    url = f"http://rail.eecs.berkeley.edu/datasets/offline_rl/gym_mujoco_v2/{name}.hdf5"
-
-    cache_dir = os.path.join(os.path.expanduser('~'), '.d4rl', 'datasets')
-    os.makedirs(cache_dir, exist_ok=True)
-    cache_path = os.path.join(cache_dir, f"{name}.hdf5")
-
-    if not os.path.exists(cache_path):
-        print(f"Downloading D4RL dataset: {name} ...")
-        urllib.request.urlretrieve(url, cache_path)
-        print(f"Saved to {cache_path}")
 
     with h5py.File(cache_path, 'r') as f:
         dataset = {
@@ -151,6 +121,53 @@ def _load_d4rl_dataset(env_or_name):
         ], axis=0)
 
     return dataset
+
+
+def _load_d4rl_dataset(env_or_name):
+    """Load a D4RL dataset, handling both gym.Env and string env names.
+
+    Priority order:
+      1. If the HDF5 file is already cached locally, load it directly
+         (no internet needed — works on GPU nodes).
+      2. If D4RL is installed, try its API (may trigger a download).
+      3. Download the HDF5 file from the D4RL server as a last resort.
+    """
+    # Resolve the dataset name for cache lookup
+    name = env_or_name if isinstance(env_or_name, str) else getattr(
+        getattr(env_or_name, 'spec', None), 'id', str(env_or_name))
+
+    cache_dir = os.path.join(os.path.expanduser('~'), '.d4rl', 'datasets')
+    cache_path = os.path.join(cache_dir, f"{name}.hdf5")
+
+    # 1. Prefer local cache — no internet, no D4RL import needed
+    if os.path.exists(cache_path):
+        print(f"Loading cached dataset: {cache_path}")
+        return _load_from_hdf5(cache_path)
+
+    # 2. Try D4RL API (may download internally)
+    if _HAS_D4RL:
+        try:
+            if hasattr(env_or_name, 'get_dataset'):
+                return d4rl.qlearning_dataset(env_or_name)
+            else:
+                env = gym.make(env_or_name)
+                ds = d4rl.qlearning_dataset(env)
+                env.close()
+                return ds
+        except Exception:
+            pass
+
+    # 3. Fallback: download the HDF5 file directly from D4RL URLs
+    import urllib.request
+
+    url = f"http://rail.eecs.berkeley.edu/datasets/offline_rl/gym_mujoco_v2/{name}.hdf5"
+    os.makedirs(cache_dir, exist_ok=True)
+
+    print(f"Downloading D4RL dataset: {name} ...")
+    urllib.request.urlretrieve(url, cache_path)
+    print(f"Saved to {cache_path}")
+
+    return _load_from_hdf5(cache_path)
 
 
 class D4RLDataset(Dataset):
