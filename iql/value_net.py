@@ -3,7 +3,7 @@ from typing import Callable, Sequence, Tuple
 import jax.numpy as jnp
 from flax import linen as nn
 
-from common import MLP
+from iql.common import MLP
 
 
 class ValueCritic(nn.Module):
@@ -40,3 +40,23 @@ class DoubleCritic(nn.Module):
         critic2 = Critic(self.hidden_dims,
                          activations=self.activations)(observations, actions)
         return critic1, critic2
+
+
+class TripleCritic(nn.Module):
+    """Q-ensemble with 3 critics for more conservative value estimation.
+
+    Takes min(q1, q2, q3) to reduce overestimation under distribution shift.
+    """
+    hidden_dims: Sequence[int]
+    activations: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
+
+    @nn.compact
+    def __call__(self, observations: jnp.ndarray,
+                 actions: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        critic1 = Critic(self.hidden_dims,
+                         activations=self.activations)(observations, actions)
+        critic2 = Critic(self.hidden_dims,
+                         activations=self.activations)(observations, actions)
+        critic3 = Critic(self.hidden_dims,
+                         activations=self.activations)(observations, actions)
+        return critic1, critic2, critic3

@@ -1,7 +1,21 @@
+# -*- coding: utf-8 -*-
+"""Train IQL offline on D4RL datasets.
+
+Usage:
+    python scripts/train_offline.py \
+        --env_name=hopper-medium-v2 \
+        --config=configs/mujoco_config.py \
+        --num_critics=2
+"""
+
 import os
+import sys
 from typing import Tuple
 
-import gym
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import gymnasium as gym
 import numpy as np
 import tqdm
 from absl import app, flags
@@ -9,9 +23,9 @@ from ml_collections import config_flags
 from tensorboardX import SummaryWriter
 
 import wrappers
-from dataset_utils import D4RLDataset, split_into_trajectories
+from iql.dataset_utils import D4RLDataset, split_into_trajectories, d4rl_to_gymnasium_name
 from evaluation import evaluate
-from learner import Learner
+from iql import Learner
 
 FLAGS = flags.FLAGS
 
@@ -24,16 +38,19 @@ flags.DEFINE_integer('log_interval', 1000, 'Logging interval.')
 flags.DEFINE_integer('eval_interval', 5000, 'Eval interval.')
 flags.DEFINE_integer('batch_size', 256, 'Mini batch size.')
 flags.DEFINE_integer('max_steps', int(1e6), 'Number of training steps.')
+flags.DEFINE_integer('num_critics', 2,
+                     'Number of Q-networks (2=DoubleCritic, 3=TripleCritic).')
+flags.DEFINE_integer('save_interval', 0,
+                     'Checkpoint save interval (0=save only final).')
 flags.DEFINE_boolean('tqdm', True, 'Use tqdm progress bar.')
 config_flags.DEFINE_config_file(
     'config',
-    'default.py',
+    'configs/mujoco_config.py',
     'File path to the training hyperparameter configuration.',
     lock_config=False)
 
 
 def normalize(dataset):
-
     trajs = split_into_trajectories(dataset.observations, dataset.actions,
                                     dataset.rewards, dataset.masks,
                                     dataset.dones_float,
@@ -43,32 +60,30 @@ def normalize(dataset):
         episode_return = 0
         for _, _, rew, _, _, _ in traj:
             episode_return += rew
-
         return episode_return
 
     trajs.sort(key=compute_returns)
-
     dataset.rewards /= compute_returns(trajs[-1]) - compute_returns(trajs[0])
     dataset.rewards *= 1000.0
 
 
 def make_env_and_dataset(env_name: str,
                          seed: int) -> Tuple[gym.Env, D4RLDataset]:
-    env = gym.make(env_name)
-
+    gym_env_name = d4rl_to_gymnasium_name(env_name)
+    env = gym.make(gym_env_name)
     env = wrappers.EpisodeMonitor(env)
     env = wrappers.SinglePrecision(env)
 
-    env.seed(seed)
+    # gymnasium uses reset(seed=) instead of env.seed()
+    env.reset(seed=seed)
     env.action_space.seed(seed)
     env.observation_space.seed(seed)
 
-    dataset = D4RLDataset(env)
+    # Load D4RL dataset by name (doesn't need mujoco_py)
+    dataset = D4RLDataset(env_name)
 
     if 'antmaze' in FLAGS.env_name:
         dataset.rewards -= 1.0
-        # See https://github.com/aviralkumar2907/CQL/blob/master/d4rl/examples/cql_antmaze_new.py#L22
-        # but I found no difference between (x - 0.5) * 4 and x - 1.0
     elif ('halfcheetah' in FLAGS.env_name or 'walker2d' in FLAGS.env_name
           or 'hopper' in FLAGS.env_name):
         normalize(dataset)
@@ -89,6 +104,7 @@ def main(_):
                     env.observation_space.sample()[np.newaxis],
                     env.action_space.sample()[np.newaxis],
                     max_steps=FLAGS.max_steps,
+                    num_critics=FLAGS.num_critics,
                     **kwargs)
 
     eval_returns = []
@@ -96,7 +112,6 @@ def main(_):
                        smoothing=0.1,
                        disable=not FLAGS.tqdm):
         batch = dataset.sample(FLAGS.batch_size)
-
         update_info = agent.update(batch)
 
         if i % FLAGS.log_interval == 0:
@@ -118,6 +133,13 @@ def main(_):
             np.savetxt(os.path.join(FLAGS.save_dir, f'{FLAGS.seed}.txt'),
                        eval_returns,
                        fmt=['%d', '%.1f'])
+
+            # Save checkpoint
+            if FLAGS.save_interval > 0 and i % FLAGS.save_interval == 0:
+                agent.save(FLAGS.save_dir, i)
+
+    # Always save final checkpoint
+    agent.save(FLAGS.save_dir, FLAGS.max_steps)
 
 
 if __name__ == '__main__':

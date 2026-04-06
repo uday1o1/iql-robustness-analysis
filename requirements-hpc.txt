@@ -1,0 +1,31 @@
+# Pinned dependencies for SJSU CoE HPC (GLIBC 2.17, Python 3.11)
+#
+# Install with: pip install -r requirements-hpc.txt
+# The --only-binary flag is applied per-package in run_all_hpc.sh
+# for packages with C extensions. Pure Python packages install normally.
+
+# JAX ecosystem (pinned for tensorflow-probability compatibility)
+jax==0.4.35
+jaxlib==0.4.35
+ml_dtypes==0.4.1
+flax==0.8.5
+optax==0.2.3
+
+# Numerical (have C extensions — need binary wheels)
+numpy==1.26.4
+scipy==1.13.1
+h5py==3.11.0
+
+# MuJoCo (C extension)
+mujoco==3.1.6
+
+# Gymnasium (mostly pure Python)
+gymnasium==0.29.1
+
+# ML utilities (pure Python)
+tensorflow-probability==0.23.0
+absl-py==2.1.0
+ml_collections==0.1.1
+tensorboardX==2.6.2.2
+tqdm==4.66.5
+matplotlib==3.9.2
