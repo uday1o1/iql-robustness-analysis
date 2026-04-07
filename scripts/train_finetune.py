@@ -1,7 +1,18 @@
+"""Train IQL with online finetuning after offline pretraining.
+
+Usage:
+    python scripts/train_finetune.py \
+        --env_name=antmaze-umaze-v0 \
+        --config=configs/antmaze_finetune_config.py
+"""
+
 import os
+import sys
 from typing import Tuple
 
-import gym
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import gymnasium as gym
 import numpy as np
 import tqdm
 from absl import app, flags
@@ -9,10 +20,10 @@ from ml_collections import config_flags
 from tensorboardX import SummaryWriter
 
 import wrappers
-from dataset_utils import (Batch, D4RLDataset, ReplayBuffer,
-                           split_into_trajectories)
+from iql.dataset_utils import (Batch, D4RLDataset, ReplayBuffer,
+                                split_into_trajectories)
 from evaluation import evaluate
-from learner import Learner
+from iql import Learner
 
 FLAGS = flags.FLAGS
 
@@ -40,7 +51,6 @@ config_flags.DEFINE_config_file(
 
 
 def normalize(dataset):
-
     trajs = split_into_trajectories(dataset.observations, dataset.actions,
                                     dataset.rewards, dataset.masks,
                                     dataset.dones_float,
@@ -50,33 +60,31 @@ def normalize(dataset):
         episode_return = 0
         for _, _, rew, _, _, _ in traj:
             episode_return += rew
-
         return episode_return
 
     trajs.sort(key=compute_returns)
-
-    dataset.rewards /= compute_returns(trajs[-1]) - compute_returns(trajs[0])
-    dataset.rewards *= 1000.0
+    ret_range = compute_returns(trajs[-1]) - compute_returns(trajs[0])
+    if abs(ret_range) < 1e-8:
+        # All trajectories have the same return — skip normalization
+        print(f"WARNING: reward range is ~0 ({ret_range:.6f}), skipping normalization")
+    else:
+        dataset.rewards /= ret_range
+        dataset.rewards *= 1000.0
 
 
 def make_env_and_dataset(env_name: str,
                          seed: int) -> Tuple[gym.Env, D4RLDataset]:
     env = gym.make(env_name)
-
     env = wrappers.EpisodeMonitor(env)
     env = wrappers.SinglePrecision(env)
-
-    env.seed(seed)
+    env.reset(seed=seed)
     env.action_space.seed(seed)
     env.observation_space.seed(seed)
 
     dataset = D4RLDataset(env)
 
     if 'antmaze' in FLAGS.env_name:
-        # dataset.rewards -= 1.0
         pass  # normalized in the batch instead
-        # See https://github.com/aviralkumar2907/CQL/blob/master/d4rl/examples/cql_antmaze_new.py#L22
-        # but I found no difference between (x - 0.5) * 4 and x - 1.0
     elif ('halfcheetah' in FLAGS.env_name or 'walker2d' in FLAGS.env_name
           or 'hopper' in FLAGS.env_name):
         normalize(dataset)
@@ -105,13 +113,12 @@ def main(_):
     eval_returns = []
     observation, done = env.reset(), False
 
-    # Use negative indices for pretraining steps.
     for i in tqdm.tqdm(range(1 - FLAGS.num_pretraining_steps,
                              FLAGS.max_steps + 1),
                        smoothing=0.1,
                        disable=not FLAGS.tqdm):
         if i >= 1:
-            action = agent.sample_actions(observation, )
+            action = agent.sample_actions(observation)
             action = np.clip(action, -1, 1)
             next_observation, reward, done, info = env.step(action)
 
@@ -147,7 +154,11 @@ def main(_):
                 if v.ndim == 0:
                     summary_writer.add_scalar(f'training/{k}', v, i)
                 else:
-                    summary_writer.add_histogram(f'training/{k}', v, i)
+                    # Skip histogram if values contain NaN/Inf
+                    import numpy as _np
+                    v_np = _np.asarray(v)
+                    if _np.isfinite(v_np).any() and v_np.size > 0:
+                        summary_writer.add_histogram(f'training/{k}', v_np[_np.isfinite(v_np)], i)
             summary_writer.flush()
 
         if i % FLAGS.eval_interval == 0:

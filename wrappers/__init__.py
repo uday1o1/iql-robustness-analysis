@@ -1,4 +1,7 @@
 from wrappers.episode_monitor import EpisodeMonitor
 from wrappers.single_precision import SinglePrecision
 from wrappers.gravity_wrapper import GravityWrapper
+from wrappers.gravity_shift import GravityShift
 from wrappers.observation_noise import ObservationNoise
+from wrappers.friction_shift import FrictionShift
+from wrappers.reward_perturbation import RewardPerturbation

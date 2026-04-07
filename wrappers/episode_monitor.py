@@ -1,6 +1,6 @@
 import time
 
-import gym
+import gymnasium as gym
 import numpy as np
 
 from wrappers.common import TimeStep
@@ -18,8 +18,16 @@ class EpisodeMonitor(gym.ActionWrapper):
         self.episode_length = 0
         self.start_time = time.time()
 
-    def step(self, action: np.ndarray) -> TimeStep:
-        observation, reward, done, info = self.env.step(action)
+    def step(self, action: np.ndarray):
+        step_result = self.env.step(action)
+        # Handle both gymnasium (5 values) and gym (4 values) APIs
+        if len(step_result) == 5:
+            observation, reward, terminated, truncated, info = step_result
+            done = terminated or truncated
+        else:
+            observation, reward, done, info = step_result
+            terminated = done
+            truncated = False
 
         self.reward_sum += reward
         self.episode_length += 1
@@ -36,8 +44,12 @@ class EpisodeMonitor(gym.ActionWrapper):
                 info['episode']['return'] = self.get_normalized_score(
                     info['episode']['return']) * 100.0
 
-        return observation, reward, done, info
+        # Return 5 values for gymnasium compatibility
+        return observation, reward, terminated, truncated, info
 
-    def reset(self) -> np.ndarray:
+    def reset(self, **kwargs):
         self._reset_stats()
-        return self.env.reset()
+        result = self.env.reset(**kwargs)
+        # Pass through whatever the underlying env returns
+        # (gymnasium returns (obs, info), gym returns just obs)
+        return result
