@@ -111,13 +111,29 @@ We extend IQL's `DoubleCritic` (2 Q-networks, `min(q1,q2)`) to a `TripleCritic` 
 - **AUDC:** Area Under Degradation Curve — integrates |Δ(δ)| over shift levels. Lower is better.
 - **Worst-case:** minimum score across all shift levels
 
+### Evaluation Strategy
+
+The experiment pipeline runs in 4 phases, each building on the previous:
+
+1. **Phase 1 — Training:** Train IQL agents for each (environment, num_critics) pair at the default expectile τ=0.7. This produces 6 trained models (3 envs × 2Q/3Q). Each model is saved as a checkpoint.
+
+2. **Phase 2 — Shift Evaluation:** Load each checkpoint and evaluate it under all 4 shift types at 4 severity levels (16 conditions per model). The baseline-level rows (gravity=1.0, noise=0.0, etc.) in these CSVs serve as the **no-shift baseline performance** — no separate baseline evaluation is needed. This produces 6 CSVs with the 2Q vs 3Q comparison.
+
+3. **Phase 3 — τ Ablation:** For each non-default τ ∈ {0.5, 0.8, 0.9}, retrain from scratch and re-evaluate under all shifts. This is done for both 2Q and 3Q, producing 18 additional CSVs (3 envs × 3 τ values × 2 critic configs). Combined with the τ=0.7 results from Phase 2, this gives a complete 4-point τ sweep for each (environment, critic) pair.
+
+4. **Phase 4 — Analysis:** Compute AUDC and worst-case metrics from all CSVs, write per-environment summary files (`summary_{env}.csv`) with one row per (config, shift_type) combination.
+
+The key design choice is that **shift evaluation inherently includes baseline measurement** — the no-shift condition is just one of the 4 levels tested. This avoids redundant evaluation runs and ensures baseline and shifted results use the exact same trained model.
+
 ---
 
 ## Results
 
-All experiments run on SJSU CoE HPC (GPU partition), 300k training steps, seed=42.
+All experiments run on SJSU CoE HPC (GPU partition), 300k training steps, seed=42. The experiment covers **3 D4RL datasets × 8 configurations × 4 shift types × 4 levels = 384 shift-level evaluations**, each averaged over 10 episodes.
 
-### Baseline Performance (No Shift)
+The shift evaluation CSVs serve double duty: the baseline-level rows (gravity=1.0, obs_noise=0.0, friction=1.0, reward_perturb=0.0) provide the **no-shift baseline performance** for each configuration, while the shifted rows measure robustness degradation. This means the shift evaluation results contain both the baseline IQL and Q-ensemble performance numbers — no separate baseline files are needed.
+
+### Baseline Performance (No Shift, τ=0.7)
 
 | Environment | 2Q Return | 3Q Return |
 |---|---|---|
@@ -154,25 +170,36 @@ All experiments run on SJSU CoE HPC (GPU partition), 300k training steps, seed=4
 | Friction | 0.161 | **0.154** | 3Q |
 | Reward Perturb | **0.001** | 0.002 | 2Q |
 
-### Expectile τ Ablation (2Q only)
+### Expectile τ Ablation (2Q + 3Q)
 
-Higher τ → higher baseline but less robust. Lower τ (more pessimistic) trades performance for robustness.
+We ablated the expectile hyperparameter τ ∈ {0.5, 0.7, 0.8, 0.9} for both 2Q and 3Q across all 3 environments. The default τ=0.7 results come from the Phase 2 shift evaluation; the non-default τ values were trained and evaluated separately in Phase 3.
 
-**Hopper — Gravity AUDC by τ:**
+**Hopper — AUDC by τ (lower = more robust):**
 
-| τ | Baseline | Gravity AUDC | Obs Noise AUDC | Friction AUDC |
-|---|---|---|---|---|
-| 0.5 | 1420 | **0.566** | **0.136** | **0.691** |
-| 0.7 | 1712 | 0.596 | 0.146 | 0.738 |
-| 0.8 | 1830 | 0.695 | 0.141 | 0.749 |
-| 0.9 | 1934 | 0.773 | 0.180 | 0.773 |
+| τ | 2Q Baseline | 2Q Gravity | 2Q Noise | 3Q Baseline | 3Q Gravity | 3Q Noise |
+|---|---|---|---|---|---|---|
+| 0.5 | 1483 | **0.546** | **0.104** | 1478 | 0.599 | 0.148 |
+| 0.7 | 1712 | 0.596 | 0.146 | 1426 | **0.574** | **0.142** |
+| 0.8 | 2045 | 0.757 | 0.169 | 1782 | 0.668 | 0.146 |
+| 0.9 | 1603 | 0.668 | 0.151 | 1688 | 0.739 | 0.156 |
+
+**Walker2d — AUDC by τ:**
+
+| τ | 2Q Baseline | 2Q Gravity | 2Q Friction | 3Q Baseline | 3Q Gravity | 3Q Friction |
+|---|---|---|---|---|---|---|
+| 0.5 | 3361 | 0.776 | 0.138 | 3499 | **0.708** | **0.074** |
+| 0.7 | 3550 | **0.693** | 0.161 | 3549 | 0.790 | 0.154 |
+| 0.8 | 3376 | 0.776 | 0.147 | 3459 | 0.727 | 0.179 |
+| 0.9 | 3561 | 0.729 | 0.200 | 3281 | 0.740 | 0.204 |
 
 ### Key Findings
 
-1. **Q-ensemble (3Q) improves robustness on Hopper** but the effect is environment-dependent — Walker2d shows the opposite trend
+1. **Q-ensemble (3Q) improves robustness on Hopper** but the effect is environment-dependent — Walker2d shows the opposite trend at default τ
 2. **Reward perturbation has negligible impact** (AUDC < 0.003 everywhere) — offline policies are insensitive to reward noise at test time since they don't update
 3. **Gravity and friction are the most damaging shifts** — AUDC > 0.5 on Hopper and Walker2d
-4. **Lower expectile τ improves robustness** at the cost of baseline performance — consistent with IQL theory (more pessimistic value estimates)
+4. **Lower expectile τ generally improves robustness** at the cost of baseline performance — consistent with IQL theory (more pessimistic value estimates)
+5. **3Q + low τ can be highly effective** — Walker2d 3Q at τ=0.5 achieves the lowest friction AUDC (0.074) across all configurations
+6. **The interaction between Q-ensemble and τ is non-trivial** — 3Q doesn't uniformly help; the optimal (critics, τ) pair is environment-dependent
 
 ---
 
@@ -218,13 +245,11 @@ iql-robustness-analysis/
 │   ├── 03_evaluate_shift.ipynb   #   Evaluate under shift
 │   └── 04_analyze_results.ipynb  #   Generate plots and tables
 │
-├── results/                      # Experiment outputs
+├── results/                      # Experiment outputs (24 shift CSVs + 3 summaries)
 │   ├── shift_{env}_{2Q|3Q}_seed42.csv        # Phase 2: shift eval (6 files)
-│   ├── shift_{env}_2Q_seed42_tau{τ}.csv      # Phase 3: ablation (9 files)
+│   ├── shift_{env}_{2Q|3Q}_seed42_tau{τ}.csv # Phase 3: ablation (18 files)
 │   ├── summary_{env}.csv                     # Phase 4: AUDC summary (3 files)
-│   ├── results_baseline_iql.csv              # Training curve (2Q hopper)
-│   ├── results_ensemble_iql.csv              # Training curve (3Q hopper)
-│   └── results_comparison.png                # Comparison plot
+│   └── archive/                              # Legacy training curves
 │
 ├── requirements.txt
 ├── LICENSE
