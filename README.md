@@ -2,6 +2,8 @@
 
 **CMPE 260 — Reinforcement Learning | Group 6 | San José State University**
 
+> 📖 **New to this project?** Read the [Experiment Guide](docs/EXPERIMENT_GUIDE.md) for a plain-language explanation of the entire experiment — what IQL is, what MuJoCo robots are, what the distribution shifts do, and how to interpret the results.
+
 ---
 
 ## Team
@@ -273,6 +275,9 @@ iql-robustness-analysis/
 │   ├── 02_train_ensemble.ipynb   #   Train 3Q on all envs
 │   ├── 03_evaluate_shift.ipynb   #   Evaluate under shift
 │   └── 04_analyze_results.ipynb  #   Generate plots and tables
+│
+├── docs/                         # Documentation
+│   └── EXPERIMENT_GUIDE.md       #   Plain-language experiment explanation
 │
 ├── results/                      # Experiment outputs (24 shift CSVs + 3 summaries)
 │   ├── shift_{env}_{2Q|3Q}_seed42.csv        # Phase 2: shift eval (6 files)
