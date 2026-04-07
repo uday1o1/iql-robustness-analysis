@@ -172,25 +172,46 @@ The shift evaluation CSVs serve double duty: the baseline-level rows (gravity=1.
 
 ### Expectile τ Ablation (2Q + 3Q)
 
-We ablated the expectile hyperparameter τ ∈ {0.5, 0.7, 0.8, 0.9} for both 2Q and 3Q across all 3 environments. The default τ=0.7 results come from the Phase 2 shift evaluation; the non-default τ values were trained and evaluated separately in Phase 3.
+We ablated the expectile hyperparameter τ ∈ {0.5, 0.7, 0.8, 0.9} for both 2Q and 3Q across all 3 environments and all 4 shift types. The default τ=0.7 results come from the Phase 2 shift evaluation; the non-default τ values were trained and evaluated separately in Phase 3. This gives a complete 4×2 grid (4 τ values × 2 critic configs) per environment.
 
 **Hopper — AUDC by τ (lower = more robust):**
 
-| τ | 2Q Baseline | 2Q Gravity | 2Q Noise | 3Q Baseline | 3Q Gravity | 3Q Noise |
+| τ | Config | Baseline | Gravity | Obs Noise | Friction | Reward Perturb |
 |---|---|---|---|---|---|---|
-| 0.5 | 1483 | **0.546** | **0.104** | 1478 | 0.599 | 0.148 |
-| 0.7 | 1712 | 0.596 | 0.146 | 1426 | **0.574** | **0.142** |
-| 0.8 | 2045 | 0.757 | 0.169 | 1782 | 0.668 | 0.146 |
-| 0.9 | 1603 | 0.668 | 0.151 | 1688 | 0.739 | 0.156 |
+| 0.5 | 2Q | 1483 | 0.546 | **0.104** | 0.700 | 0.002 |
+| 0.5 | 3Q | 1478 | 0.599 | 0.148 | 0.693 | 0.001 |
+| 0.7 | 2Q | 1712 | 0.596 | 0.146 | 0.738 | 0.002 |
+| 0.7 | 3Q | 1426 | **0.574** | 0.142 | **0.687** | 0.001 |
+| 0.8 | 2Q | 2045 | 0.757 | 0.169 | 0.782 | 0.001 |
+| 0.8 | 3Q | 1782 | 0.668 | 0.146 | 0.749 | 0.001 |
+| 0.9 | 2Q | 1603 | 0.668 | 0.151 | 0.714 | 0.001 |
+| 0.9 | 3Q | 1688 | 0.739 | 0.156 | 0.734 | **0.001** |
+
+**HalfCheetah — AUDC by τ:**
+
+| τ | Config | Baseline | Gravity | Obs Noise | Friction | Reward Perturb |
+|---|---|---|---|---|---|---|
+| 0.5 | 2Q | 5385 | 0.305 | 0.130 | 0.017 | 0.000 |
+| 0.5 | 3Q | 5404 | 0.290 | **0.128** | 0.012 | 0.000 |
+| 0.7 | 2Q | 5510 | **0.245** | 0.144 | 0.016 | **0.000** |
+| 0.7 | 3Q | 5536 | 0.255 | 0.134 | **0.011** | 0.001 |
+| 0.8 | 2Q | 5551 | 0.263 | 0.131 | **0.013** | 0.001 |
+| 0.8 | 3Q | 5522 | 0.280 | 0.144 | 0.014 | 0.000 |
+| 0.9 | 2Q | 5512 | 0.296 | 0.143 | 0.037 | 0.001 |
+| 0.9 | 3Q | 5586 | 0.276 | 0.131 | 0.019 | 0.001 |
 
 **Walker2d — AUDC by τ:**
 
-| τ | 2Q Baseline | 2Q Gravity | 2Q Friction | 3Q Baseline | 3Q Gravity | 3Q Friction |
+| τ | Config | Baseline | Gravity | Obs Noise | Friction | Reward Perturb |
 |---|---|---|---|---|---|---|
-| 0.5 | 3361 | 0.776 | 0.138 | 3499 | **0.708** | **0.074** |
-| 0.7 | 3550 | **0.693** | 0.161 | 3549 | 0.790 | 0.154 |
-| 0.8 | 3376 | 0.776 | 0.147 | 3459 | 0.727 | 0.179 |
-| 0.9 | 3561 | 0.729 | 0.200 | 3281 | 0.740 | 0.204 |
+| 0.5 | 2Q | 3361 | 0.776 | 0.114 | 0.138 | **0.000** |
+| 0.5 | 3Q | 3499 | **0.708** | 0.126 | **0.074** | 0.001 |
+| 0.7 | 2Q | 3550 | **0.693** | **0.118** | 0.161 | 0.001 |
+| 0.7 | 3Q | 3549 | 0.790 | 0.128 | 0.154 | 0.002 |
+| 0.8 | 2Q | 3376 | 0.776 | **0.103** | 0.147 | 0.001 |
+| 0.8 | 3Q | 3459 | 0.727 | 0.100 | 0.179 | 0.002 |
+| 0.9 | 2Q | 3561 | 0.729 | 0.138 | 0.200 | 0.001 |
+| 0.9 | 3Q | 3281 | 0.740 | 0.120 | 0.204 | 0.002 |
 
 ### Key Findings
 
