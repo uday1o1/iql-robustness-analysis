@@ -135,6 +135,8 @@ The key design choice is that **shift evaluation inherently includes baseline me
 
 All experiments run on SJSU CoE HPC (GPU partition), 300k training steps, **4 seeds (42, 43, 44, 45)**. The experiment covers **3 D4RL datasets × 8 configurations × 4 shift types × 4 levels × 4 seeds = 1,536 shift-level evaluations**, each averaged over 10 episodes. All AUDC values below are reported as **mean ± std** across seeds.
 
+> 📊 **Per-seed breakdown:** See [Detailed Results](docs/DETAILED_RESULTS.md) for individual seed values, cross-environment comparison tables, and seed stability analysis.
+
 The shift evaluation CSVs serve double duty: the baseline-level rows (gravity=1.0, obs_noise=0.0, friction=1.0, reward_perturb=0.0) provide the **no-shift baseline performance** for each configuration, while the shifted rows measure robustness degradation. This means the shift evaluation results contain both the baseline IQL and Q-ensemble performance numbers — no separate baseline files are needed.
 
 ### Baseline Performance (No Shift, τ=0.7, mean ± std)
@@ -279,7 +281,8 @@ iql-robustness-analysis/
 │   └── 04_analyze_results.ipynb  #   Generate plots and tables
 │
 ├── docs/                         # Documentation
-│   └── EXPERIMENT_GUIDE.md       #   Plain-language experiment explanation
+│   ├── EXPERIMENT_GUIDE.md       #   Plain-language experiment explanation
+│   └── DETAILED_RESULTS.md      #   Per-seed results tables & analysis
 │
 ├── results/                      # Experiment outputs (24 shift CSVs + 3 summaries)
 │   ├── shift_{env}_{2Q|3Q}_seed42.csv        # Phase 2: shift eval (6 files)
