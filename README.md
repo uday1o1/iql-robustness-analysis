@@ -6,14 +6,12 @@
 
 ---
 
-## Team
+## Author Contributions
 
-| Student | Role |
-|---|---|
-| Joao Lucas Veras | Baseline IQL reproduction |
-| Shloak Aggarwal | Distribution shift design |
-| Pramod Yadav | Evaluation metrics & literature survey |
-| Uday Arora | Q-ensemble extension |
+- **Pramod Yadav:** Literature survey, evaluation metrics implementation, HPC seed runs, result analysis, partial report writing, and manuscript review.
+- **Uday Arora:** TripleCritic (Q-ensemble) implementation, robustness metric design (AUDC), ablation experiments, partial report writing, and manuscript review.
+- **Shloak Aggarwal:** Distribution shift wrapper design, evaluation pipeline, project coordination, and manuscript review.
+- **Joao Lucas Veras:** IQL baseline reproduction, codebase integration, baseline experiments, and manuscript review.
 
 ---
 
@@ -538,7 +536,13 @@ python scripts/compute_robustness.py --results_dir=results/ --env_name=hopper-me
 
 ## References
 
-1. Kostrikov, I., Nair, A., & Levine, S. (2022). *Offline Reinforcement Learning with Implicit Q-Learning*. ICLR. [arXiv:2110.06169](https://arxiv.org/abs/2110.06169)
-2. Kumar, A., Zhou, A., Tucker, G., & Levine, S. (2020). *Conservative Q-Learning for Offline Reinforcement Learning*. NeurIPS. [arXiv:2006.04779](https://arxiv.org/abs/2006.04779)
-3. Fujimoto, S. & Gu, S. (2021). *A Minimalist Approach to Offline Reinforcement Learning (TD3+BC)*. NeurIPS. [arXiv:2106.06860](https://arxiv.org/abs/2106.06860)
-4. Fu, J., Kumar, A., Nachum, O., Tucker, G., & Levine, S. (2020). *D4RL: Datasets for Deep Data-Driven Reinforcement Learning*. [arXiv:2004.07219](https://arxiv.org/abs/2004.07219)
+1. Kumar, A., Zhou, A., Tucker, G., & Levine, S. (2020). *Conservative Q-Learning for Offline Reinforcement Learning*. NeurIPS.
+2. Kostrikov, I., Nair, A., & Levine, S. (2022). *Offline Reinforcement Learning with Implicit Q-Learning*. ICLR.
+3. Fujimoto, S., & Gu, S. S. (2021). *A Minimalist Approach to Offline Reinforcement Learning*. NeurIPS.
+4. Fu, J., Kumar, A., Nachum, O., Tucker, G., & Levine, S. (2020). *D4RL: Datasets for Deep Data-Driven Reinforcement Learning*. arXiv.
+5. Kostrikov, I., Nair, A., & Levine, S. (2022). *Implicit Q-Learning (official implementation)*. GitHub repository.
+6. Levine, S., Kumar, A., Tucker, G., & Fu, J. (2020). *Offline Reinforcement Learning: Tutorial, Review, and Perspectives on Open Problems*. arXiv.
+7. Fujimoto, S., van Hoof, H., & Meger, D. (2018). *Addressing Function Approximation Error in Actor-Critic Methods*. ICML.
+8. An, G., Moon, S., Kim, J.-H., & Song, H. O. (2021). *Uncertainty-based Offline Reinforcement Learning with Diversified Q-Ensemble*. NeurIPS.
+9. Tobin, J., Fong, R., Ray, A., Schneider, J., Zaremba, W., & Abbeel, P. (2017). *Domain Randomization for Transferring Deep Neural Networks from Simulation to the Real World*. IROS.
+10. Iyengar, G. N. (2005). *Robust Dynamic Programming*. Mathematics of Operations Research.
